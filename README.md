@@ -1,6 +1,6 @@
 # task-manager
 
-A Claude Code plugin that ingests tasks from local markdown files across four domains, produces ranked daily and weekend plans using a fixed GTD priority ladder, and one-way syncs tasks into a private GitHub Project.
+A Claude Code plugin that ingests tasks from local markdown files across five domains, produces ranked daily and weekend plans using a fixed GTD priority ladder, and one-way syncs tasks into a private GitHub Project.
 
 ---
 
@@ -15,11 +15,12 @@ A Claude Code plugin that ingests tasks from local markdown files across four do
 
 ---
 
-## The four domains
+## The five domains
 
 | Domain          | File                      | What belongs here                                    |
 |-----------------|---------------------------|------------------------------------------------------|
-| `fulltime`      | `tasks/fulltime.md`       | Work directly for your employer                      |
+| `fulltime`      | `tasks/fulltime.md`       | Work directly for your full-time employer            |
+| `parttime`      | `tasks/parttime.md`       | Work for your part-time job                          |
 | `side-projects` | `tasks/side-projects.md`  | Personal projects you are building or running        |
 | `open-source`   | `tasks/open-source.md`    | Contributions to public repos, community work        |
 | `knowledge`     | `tasks/knowledge.md`      | Learning, reading, research, note synthesis          |
@@ -40,9 +41,9 @@ Completed tasks use `- [x]` instead of `- [ ]`.
 
 ### Full tag reference
 
-| Tag        | Required | Values / format                                             | Notes                                          |
-|------------|----------|-------------------------------------------------------------|------------------------------------------------|
-| `prio`     | Yes*     | `fulltime`, `side`, `trust`, `long`, `short`, `tedious`     | Sets the priority ladder rank. *Missing = rank 99 + warning |
+| Tag        | Required | Values / format                                                        | Notes                                          |
+|------------|----------|------------------------------------------------------------------------|------------------------------------------------|
+| `prio`     | Yes*     | `fulltime`, `parttime`, `side`, `trust`, `long`, `short`, `tedious`    | Sets the priority ladder rank. *Missing = rank 99 + warning |
 | `project`  | No       | any string (no spaces)                                      | Groups tasks by project/area                   |
 | `effort`   | No       | `30m`, `1h`, `2h`, `1.5h`, etc.                             | Used for greedy time-filling; missing = unknown (sorts last) |
 | `impact`   | No       | `long`, `short`                                             | Informational only; not used in ranking        |
@@ -55,15 +56,16 @@ Completed tasks use `- [x]` instead of `- [ ]`.
 
 The `prio:` tag is the **only** field that sets ranking position. It is never overridden.
 
-| prio value | rank | Natural meaning                                                    |
-|------------|------|--------------------------------------------------------------------|
-| `fulltime` | 1    | Deliverables that directly drive your job performance              |
-| `side`     | 2    | Active side-project work moving toward launch or revenue           |
-| `trust`    | 3    | Tasks affecting credit/trust — commitments others are waiting on   |
-| `long`     | 4    | High-leverage long-term investments (compounds over months)        |
-| `short`    | 5    | Low-stakes quick wins                                              |
-| `tedious`  | 6    | Necessary but mechanical tasks                                     |
-| missing    | 99   | Sorts last; emits a warning naming file and task title             |
+| prio value | rank | Natural meaning                                                      |
+|------------|------|----------------------------------------------------------------------|
+| `fulltime` | 1    | Deliverables that directly drive your full-time job performance      |
+| `parttime` | 2    | Deliverables that directly drive your part-time job performance      |
+| `side`     | 3    | Active side-project work moving toward launch or revenue             |
+| `trust`    | 4    | Tasks affecting credit/trust — commitments others are waiting on     |
+| `long`     | 5    | High-leverage long-term investments (compounds over months)          |
+| `short`    | 6    | Low-stakes quick wins                                                |
+| `tedious`  | 7    | Necessary but mechanical tasks                                       |
+| missing    | 99   | Sorts last; emits a warning naming file and task title               |
 
 ---
 
