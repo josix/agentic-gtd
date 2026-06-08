@@ -68,27 +68,37 @@ If the block is malformed or missing, fall back to building the confirmation car
 
 ### Step 4 — CONFIRM via AskUserQuestion
 
-Present ONE `AskUserQuestion` call (main agent only) with up to 4 questions, pre-filled from the proposal (recommended option first, labelled "(Recommended)"):
+The main agent confirms the Triage proposal using TWO `AskUserQuestion` calls (followups are fine — there is no one-card limit). Both are pre-filled from the proposal (recommended option first, labelled "(Recommended)"). The subagent's proposal drives the defaults; its `ambiguity_notes` drive any extra followup questions.
+
+**Call 1 — Core decisions** (4 questions):
 
 - **Q1 — Action**: A) `<reworded_title>` (Recommended), B) keep original raw text. (Other = user types a corrected title.)
 - **Q2 — Domain**: the inferred domain (Recommended) + the other valid domains as alternatives (`fulltime`, `parttime`, `side-projects`, `open-source`, `knowledge`).
 - **Q3 — Priority**: the inferred prio (Recommended) + 2–3 plausible alternatives from the vocabulary (`fulltime`, `parttime`, `side`, `trust`, `long`, `short`, `tedious`).
-- **Q4 — Details** (multiSelect): toggle-able inferred optional tags — `project:<v>`, `effort:<v>`, `due:<v>`, `context:<v>`. Show `impact:<v>` ONLY when domain is `fulltime` or `parttime`. Selected = include in the written line, unselected = omit. (Other lets the user free-text overrides or additions.)
+- **Q4 — ETA (due date)**: when is this due? Offer (recommended-first based on the proposal's `due`):
+  - If the proposal has a `due`, show it as option A (Recommended).
+  - Otherwise: **No deadline** (Recommended) · **Today** (`<runtime today, YYYY-MM-DD>`) · **End of this week** (compute the coming Sunday's ISO date from the runtime clock). Other = user types an explicit `YYYY-MM-DD` (or a phrase like "next friday" to normalize).
+  - "No deadline" → omit the `due` tag entirely.
 
-Surface `ambiguity_notes` to the user in the question text where relevant.
+**Call 2 — Optional tags & ambiguities (followup)** — issue this as a second `AskUserQuestion` call after Call 1:
 
-**Backward-compat shortcut**: If the user supplied an explicit domain AND all needed tags at capture AND `ambiguity_notes` is `"none"`, you MAY skip the full card (or present a single confirm step) and proceed directly to Step 5.
+- **Details** (multiSelect): toggle-able inferred optional tags — `project:<v>`, `effort:<v>`, `context:<v>`. Show `impact:<v>` ONLY when the (now-confirmed) domain is `fulltime` or `parttime`. Selected = include in the written line, unselected = omit. (Other lets the user free-text overrides or additions, e.g. `effort:1h`.)
+- **Ambiguity followups**: for each item the proposal flagged in `ambiguity_notes` (e.g. an uncertain project label, or a "should this be split?" note), add a targeted question in this same call so the user can resolve it. Stay within the 4-question cap per call; if there are more, issue another followup call.
+
+If Call 2 would have no Details to confirm AND no ambiguities to resolve, you may skip it.
+
+**Backward-compat shortcut**: If the user supplied an explicit domain AND all needed tags at capture AND `ambiguity_notes` is `"none"`, you MAY skip the cards (or present a single confirm step) and proceed directly to Step 5.
 
 ### Step 5 — APPLY
 
-Overlay the user's answers onto the proposal:
+Overlay the user's answers from Call 1 (Action / Domain / Priority / ETA) and Call 2 (the Details multiSelect + any ambiguity followups) onto the Triage proposal:
 
-- **prio**: must be in the vocabulary (`fulltime|parttime|side|trust|long|short|tedious`). If invalid or missing → warn and default to `short`.
-- **domain**: must be in the Domain Mapping table. If unknown → error, write nothing.
-- **effort**: accept formats like `30m`, `1h`, `2h`, `1.5h`. If missing, omit the tag.
-- **due**: must be ISO date `YYYY-MM-DD`. Attempt to normalize other formats; if unparseable, warn and omit. Never invent a due date.
-- **context**: lowercase, leading `@` on each item, comma-separated for multiple.
-- **impact**: include only when domain is `fulltime` or `parttime` and a value was confirmed. For all other domains, omit `impact` even if the user supplied one via Other (warn the user if so).
+- **title**: from Q1 (Call 1).
+- **domain**: from Q2 (Call 1). Must be in the Domain Mapping table. If unknown → error, write nothing.
+- **prio**: from Q3 (Call 1). Must be in the vocabulary (`fulltime|parttime|side|trust|long|short|tedious`). If invalid or missing → warn and default to `short`.
+- **due**: from Q4 (Call 1, the ETA question). "No deadline" → omit. A relative phrase (Today / End of this week / "next friday") → normalize to ISO `YYYY-MM-DD` using the runtime clock. An explicit value must be ISO `YYYY-MM-DD`; if unparseable, warn and omit. Never invent a due date the user did not give.
+- **project / effort / context**: from the Call 2 Details selection — include the tags the user kept selected (or supplied via Other), omit the unselected ones. effort accepts `30m`, `1h`, `2h`, `1.5h`; context is lowercased with leading `@`, comma-separated.
+- **impact**: include only when domain is `fulltime` or `parttime` and it was kept in the Call 2 Details selection. For all other domains, omit `impact` even if the user supplied one (warn the user if so).
 
 ### Step 6 — APPEND (append-only)
 
