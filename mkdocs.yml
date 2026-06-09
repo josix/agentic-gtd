@@ -1,0 +1,90 @@
+site_name: Agentic GTD
+site_description: GTD-grounded productivity plugin with ranked daily/weekend plans and one-way GitHub Project sync
+
+repo_name: agentic-gtd
+repo_url: https://github.com/josix/agentic-gtd
+edit_uri: edit/main/docs/
+
+theme:
+  name: material
+  palette:
+    - media: "(prefers-color-scheme: light)"
+      scheme: default
+      primary: indigo
+      accent: indigo
+      toggle:
+        icon: material/brightness-7
+        name: Switch to dark mode
+    - media: "(prefers-color-scheme: dark)"
+      scheme: slate
+      primary: indigo
+      accent: indigo
+      toggle:
+        icon: material/brightness-4
+        name: Switch to light mode
+  features:
+    - navigation.sections
+    - navigation.top
+    - search.suggest
+    - content.code.copy
+  icon:
+    repo: fontawesome/brands/github
+
+plugins:
+  - search
+
+markdown_extensions:
+  - admonition
+  - attr_list
+  - md_in_html
+  - tables
+  - toc:
+      permalink: true
+  - pymdownx.superfences:
+      custom_fences:
+        - name: mermaid
+          class: mermaid
+          format: !!python/name:pymdownx.superfences.fence_code_format
+  - pymdownx.tasklist:
+      custom_checkbox: true
+  - pymdownx.highlight:
+      anchor_linenums: true
+  - pymdownx.details
+  - pymdownx.tabbed:
+      alternate_style: true
+
+nav:
+  - Home: index.md
+  - Getting Started:
+      - Installation: getting-started/installation.md
+      - Quick Start: getting-started/quick-start.md
+  - Concepts:
+      - Five Domains: concepts/five-domains.md
+      - Task Line Format: concepts/task-line-format.md
+      - Priority Ladder: concepts/priority-ladder.md
+      - Ranking: concepts/ranking.md
+      - GTD Methodology: concepts/gtd-methodology.md
+  - Guides:
+      - Using /plan-day: guides/using-plan-day.md
+      - Using /plan-week: guides/using-plan-week.md
+      - Using /plan-weekend: guides/using-plan-weekend.md
+      - Capturing Tasks: guides/capturing-tasks.md
+      - GitHub Sync: guides/github-sync.md
+      - Obsidian Dashboard: guides/obsidian-dashboard.md
+  - Reference:
+      - Commands: reference/commands.md
+      - Skills: reference/skills.md
+      - Triage Agent: reference/triage-agent.md
+      - FAQ: reference/faq.md
+
+validation:
+  links:
+    not_found: ignore
+    absolute_links: warn
+    unrecognized_links: warn
+
+extra:
+  social:
+    - icon: fontawesome/brands/github
+      link: https://github.com/josix/agentic-gtd
+  generator: false
