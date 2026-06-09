@@ -1,4 +1,6 @@
-.task-manager.local.md
+.agentic-gtd.local.md
+# MkDocs build output
+site/
 
 # Live task data is personal — keep it local. Header-only scaffolding lives
 # in tasks/templates/ (tracked). Copy a template to tasks/<domain>.md to start.

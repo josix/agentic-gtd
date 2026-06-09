@@ -1,4 +1,4 @@
-# Task Manager Dashboard
+# Agentic GTD Dashboard
 
 > **INTERACTIVE DASHBOARD** — Renders a GitHub-Projects-style Board + Table dashboard with in-place editing.
 > Open tasks are sourced live from `tasks/*.md` files; those files are the single source of truth.

@@ -1,5 +1,5 @@
 {
-  "name": "task-manager",
+  "name": "agentic-gtd",
   "version": "0.1.0",
   "description": "GTD-grounded task manager that ingests tasks from local markdown across five domains, produces ranked daily and weekend plans via a fixed priority ladder, and one-way syncs tasks into a private GitHub Project.",
   "author": { "name": "wilson.wang", "email": "josixwang@gmail.com" },

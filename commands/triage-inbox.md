@@ -9,7 +9,7 @@ allowed-tools: Read, Edit, Write, Glob, Task, AskUserQuestion
 Route-back target for the Obsidian dashboard "Copy triage command" button.  
 Reads `tasks/inbox.md`, turns raw capture lines into well-formed GTD task lines (via the Triage agent), and files them into the correct domain files — all after user confirmation.
 
-**Source of truth**: markdown files only. This command never touches `.task-manager.local.md`. No lines are deleted — resolved inbox lines are marked `[x]` in place.
+**Source of truth**: markdown files only. This command never touches `.agentic-gtd.local.md`. No lines are deleted — resolved inbox lines are marked `[x]` in place.
 
 ---
 
@@ -176,6 +176,6 @@ Skipped (ambiguous / deselected):
 
 - **Non-destructive**: inbox lines are marked `[x]` with a resolution tag, never deleted. The inbox is append-only; `/triage-inbox` is the only command that marks lines there.
 - **Append-only to domain files**: new task lines are appended after the last existing line. No reordering.
-- **Markdown is source of truth**: no external state is modified. `.task-manager.local.md` is never touched.
+- **Markdown is source of truth**: no external state is modified. `.agentic-gtd.local.md` is never touched.
 - **Inbox excluded elsewhere**: `tasks/inbox.md` is never read by `/plan-day`, `/plan-weekend`, `/review-tasks`, or `/sync-github`. Only `/triage-inbox` and the Triage agent read it.
 - **Triage agent contract**: this command invokes `agents/Triage.md` in INBOX-CLARIFY/standalone mode. The agent must NOT write files in this mode — only return proposals. All writes are performed by `/triage-inbox` after user confirmation.

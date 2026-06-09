@@ -18,7 +18,7 @@ the URL-param trick, and verification. Follow it.
 ## Preconditions (check; abort with a clear message if unmet)
 
 1. **Project has fields + items.** Layout is meaningless on an empty/field-less project. If
-   `.task-manager.local.md` is missing or the project has no items, tell the user to run
+   `.agentic-gtd.local.md` is missing or the project has no items, tell the user to run
    `/sync-github --init` (and a sync) first, and stop.
 2. **Authenticated browser as the project OWNER.** `gh auth status` must show the owner account
    (e.g. `josix`), and the **Playwright browser must be logged in** to GitHub as that owner.
@@ -27,19 +27,19 @@ the URL-param trick, and verification. Follow it.
      then resume.
 3. **Token scope** (only if you'll read back item data): `gh auth refresh -s read:project,project`
    if the token lacks `project`. (Layout itself needs no token — it's pure UI — but field/option
-   IDs come from `.task-manager.local.md`, written by `/sync-github --init`.)
+   IDs come from `.agentic-gtd.local.md`, written by `/sync-github --init`.)
 
 ## Argument Parsing
 
 - **project**: a `https://github.com/users/<owner>/projects/<n>/...` URL or a bare number. If
-  omitted, read `projectNumber`/`owner` from `.task-manager.local.md`.
+  omitted, read `projectNumber`/`owner` from `.agentic-gtd.local.md`.
 - **view spec**: `default` (the three views below) or a free-form description of the views/columns
   the user wants. If ambiguous, ask ONE `AskUserQuestion` to confirm the target views.
 
 ## Default view spec
 
 Build/update these three views (mirrors the recommended post-sync layout). Field/option **columnIds**
-come from `.task-manager.local.md` (the `fieldId`s) — use them to construct view-URL params.
+come from `.agentic-gtd.local.md` (the `fieldId`s) — use them to construct view-URL params.
 
 | View | Layout | Group / Column | Sort | Filter | Visible fields |
 |------|--------|----------------|------|--------|----------------|

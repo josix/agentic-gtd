@@ -29,16 +29,16 @@ Delegate to the `github-sync` skill in `--init` mode:
 **If `--dry-run` is set: describe each step below WITHOUT calling any mutating tool (no project creation, no GraphQL mutations, no file writes). Then stop.**
 
 1. Resolve authenticated owner (prefer `gh` CLI or `mcp__personal-github__get_me`).
-2. Check config file `.task-manager.local.md` at repo root. If `projectId` is already set and valid → report "already initialized" and exit without recreating.
+2. Check config file `.agentic-gtd.local.md` at repo root. If `projectId` is already set and valid → report "already initialized" and exit without recreating.
 3. Create the GitHub Project and all required fields via GraphQL.
-4. Record all IDs to `.task-manager.local.md`.
-5. Add `.task-manager.local.md` to `.gitignore` if not already present.
+4. Record all IDs to `.agentic-gtd.local.md`.
+5. Add `.agentic-gtd.local.md` to `.gitignore` if not already present.
 
 ## Mode: Normal Sync
 
 Delegate to the `github-sync` skill in normal sync mode:
 
-1. Read and validate `.task-manager.local.md`; if missing or invalid → **FAIL LOUDLY** with:
+1. Read and validate `.agentic-gtd.local.md`; if missing or invalid → **FAIL LOUDLY** with:
    ```
    GitHub Project not initialized. Run /sync-github --init first.
    ```

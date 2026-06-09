@@ -167,7 +167,7 @@ the view loads), not on the GraphQL read-back.
 
 ---
 
-## 7. End-to-end example: the three task-manager views
+## 7. End-to-end example: the three agentic-gtd views
 
 Target spec (matches the layout recommended after a `/sync-github` push):
 
