@@ -90,6 +90,26 @@ Build today's ranked daily plan, filtered by available time, energy, and context
 
 **Output**: numbered ranked task list, then `## Deferred / filtered out`, then `## Warnings`.
 
+**Persistence**: the ranked plan is saved to `tasks/plans/<date>.md` (`mode: day`) with a `## Today` list and a `## Comments` section. Salient decisions you make during the conversation are auto-captured into `## Comments`. Deferred/Warnings stay chat-only. The dashboard's **Plan panel** renders this note (see below).
+
+---
+
+### `/plan-week`
+
+Build a 7-day ranked plan from today through the next six days, bucketed by each task's effective due date with per-day greedy fill.
+
+```
+/plan-week
+/plan-week 6
+```
+
+**Arguments** (all optional):
+- `hours-per-day` — available hours per day (default: 8)
+
+**Bucketing**: overdue and undated tasks land in **Today**; tasks due within the window land on their due day; tasks due after the window are deferred (chat-only). Recurring tasks bucket by effective due (`last + interval`).
+
+**Persistence**: saved to `tasks/plans/<date>.md` (`mode: week`) with `## Today`, `## Following days` (one `### YYYY-MM-DD` per day), and `## Comments`. Rendered by the dashboard Plan panel as Today + Following days.
+
 ---
 
 ### `/plan-weekend`
@@ -105,6 +125,8 @@ Run a GTD Weekly Review sweep and build a weekend plan that favors side projects
 - `hours` — available hours (default: 12)
 
 **Output**: `## Weekly Review sweep` (overdue / stale / missing metadata), then a ranked plan with reversed domain weighting, then `## Full-time (optional this weekend)` for non-overdue fulltime tasks.
+
+**Persistence**: the ranked plan is saved to `tasks/plans/<date>.md` (`mode: weekend`) with the weekend plan under `## Today`, the sectioned-out fulltime tasks under `## Full-time (optional)`, and a `## Comments` section (auto-captured decisions). The Weekly Review sweep and Warnings stay chat-only. The dashboard Plan panel renders weekend plans with a **Weekend Plan** heading plus the Full-time (optional) list.
 
 ---
 

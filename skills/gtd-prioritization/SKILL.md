@@ -182,6 +182,21 @@ Primary prio ordering is identical to daily (rank 1–7, 99 last).
 ...
 ```
 
+## Week Mode (day-bucketed planning)
+
+Used by `/plan-week`. Builds a 7-day plan (today through today+6) using the same ranking logic as Daily mode, applied per day.
+
+**Day bucketing rules** (applied before per-day ranking):
+- Recurring tasks: effective due must fall ≤ today+6 to be included; tasks with effective due > today+6 are Deferred (`recurs-not-due`).
+- Overdue tasks (effective due < today): bucket → Today.
+- Due within window (today ≤ effective due ≤ today+6): bucket → the exact matching day.
+- Due after window end: excluded, Deferred (`out-of-window`).
+- No due date, non-recurring: bucket → Today (user-confirmed default).
+
+**Per-day fill**: apply the five-level tiebreak ranking within each day's bucket; greedily fill up to `hours-per-day * 60` minutes. Overflow → Deferred with reason `over-time <date>`. Tasks are NEVER auto-pushed to the next day.
+
+**Ranking algorithm**: identical to Daily mode (prio rank → due proximity → effort → domain order → alphabetical). No special day-level weighting.
+
 ## GTD Pillar Mapping
 
 - **Capture**: raw items go to `tasks/inbox.md`; domain files hold clarified tasks.

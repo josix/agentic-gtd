@@ -6,7 +6,7 @@
 >
 > **PREREQUISITE**: Dataview's **"Enable JavaScript Queries" (DataviewJS)** setting must be turned ON in Settings → Community plugins → Dataview for the controls to work.
 >
-> Layout: **Summary bar** (stat pills) → **Board** (columns by priority tier, with Move + Resolve controls) → **Table** (grouped by domain, collapsible, with inline field editors + Resolve controls).
+> Layout: **Summary bar** (stat pills) → **Plan panels** (Today / This Week / Weekend, each showing its own latest plan note) → **Quick capture** → **Inbox** → **Board** (columns by priority tier, with Move + Resolve controls) → **Table** (grouped by domain, collapsible, with inline field editors + Resolve controls).
 
 ```dataviewjs
 // ─── Section 1: Configuration ──────────────────────────────────────────────
@@ -66,7 +66,7 @@ const domainColors = {
 try {
   // ─── Section 2: Collect open tasks ──────────────────────────────────────
 
-  // Accept tasks from domain files or any file under /tasks/; exclude inbox & templates.
+  // Accept tasks from domain files or any file under /tasks/; exclude inbox, templates, and plans.
   const allTasks = dv.pages()
     .flatMap(p => p.file.tasks)
     .filter(t => {
@@ -75,6 +75,7 @@ try {
       const stem = path.split("/").pop().replace(/\.md$/i, "").toLowerCase();
       if (stem === "inbox") return false;
       if (path.toLowerCase().includes("templates")) return false;
+      if (path.toLowerCase().includes("/plans/")) return false;
       const inDomain = domainOrder.includes(stem);
       const inTasksDir = path.toLowerCase().includes("/tasks/");
       return inDomain || inTasksDir;
@@ -316,6 +317,286 @@ try {
     `</div>`;
 
   dv.el("div", summaryHtml);
+
+  // ─── Section 7b: Plan panels — Today / Week / Weekend (shown separately) ──
+  // Renders three independent panels, one per plan mode. For each mode we pick
+  // the most recent plan note (tasks/plans/*.md) by plan-date. Plan-note
+  // checkboxes are excluded from the main task board (see Section 2).
+
+  const planSection = dv.el("div", "");
+
+  // Build a live open-task lookup by title for dimming completed plan items.
+  const openTitles = new Set(records.map(r => r.title.toLowerCase().trim()));
+
+  // Map normalized task title -> short plan label (soonest plan wins) so the
+  // board (Section 11) can badge tasks that are already scheduled in a plan.
+  const scheduledTitles = new Map();
+
+  // Plan-date as an ISO (YYYY-MM-DD) string. Plan notes are named <date>.md, so
+  // the filename is the canonical, timezone-proof plan date — prefer it. Fall
+  // back to the plan-date frontmatter (DateTime or raw string) when the name
+  // isn't a bare date.
+  function planDateISO(p) {
+    const fn = (p.file && p.file.name) ? String(p.file.name) : "";
+    if (/^\d{4}-\d{2}-\d{2}$/.test(fn)) return fn;
+    const d = p["plan-date"];
+    if (d && typeof d.toISODate === "function") return d.toISODate();
+    return String(d || "");
+  }
+
+  // Parse a plan task line: strip "N. [rank] " prefix, return the raw task line.
+  // Returns null if the line doesn't match the expected format.
+  function parsePlanLine(line) {
+    const m = line.match(/^\d+\.\s*\[\d+\]\s*(- \[[ x\-]\]\s*.+)$/);
+    if (!m) return null;
+    return m[1].trim();
+  }
+
+  // Extract tags from a raw task line and build a minimal record for rendering.
+  function planLineToRecord(rawLine) {
+    const text = rawLine.replace(/^- \[[ x\-]\]\s*/, "");
+    const prio    = extract(text, /\bprio:(\S+)/);
+    const due     = extract(text, /\bdue:(\d{4}-\d{2}-\d{2})/);
+    const context = extract(text, /\bcontext:(\S+)/);
+    const recurs  = extract(text, /\brecurs:(\S+)/);
+    const last    = extract(text, /\blast:(\d{4}-\d{2}-\d{2})/);
+    const effort  = extract(text, /\beffort:(\S+)/);
+    const domain  = extract(text, /\bdomain:(\S+)/) || "";
+    const title   = text.replace(/\b\w+:\S+/g, "").replace(/\s{2,}/g, " ").trim();
+    const duEpoch = effectiveDueEpoch(recurs, last, due);
+    let effectiveDueISO = due || "";
+    if (recurs && last) {
+      const interval = parseInterval(recurs);
+      if (interval) {
+        const lastDt = DateTime.fromISO(last);
+        if (lastDt.isValid) effectiveDueISO = lastDt.plus(interval).toISODate();
+      }
+    } else if (recurs && !last) {
+      effectiveDueISO = today.toISODate();
+    }
+    return { title, prio, due, context, recurs, last, effort, domain, duEpoch, effectiveDueISO };
+  }
+
+  // Render a single plan task row into the given container.
+  function renderPlanRow(rawLine, container, badgeLabel) {
+    const rec = planLineToRecord(rawLine);
+    const _k = rec.title.toLowerCase().trim();
+    if (badgeLabel && _k && !scheduledTitles.has(_k)) scheduledTitles.set(_k, badgeLabel);
+    const isOpen = openTitles.has(rec.title.toLowerCase().trim());
+    const dc = domainColors[rec.domain] || prioColors._unknown;
+
+    const row = document.createElement("div");
+    applyStyles(row, {
+      display: "flex",
+      alignItems: "center",
+      gap: "6px",
+      padding: "3px 0",
+      opacity: isOpen ? "1" : "0.45",
+      textDecoration: isOpen ? "none" : "line-through",
+    });
+
+    const titleSpan = document.createElement("span");
+    applyStyles(titleSpan, { fontSize: "13px", flex: "1", wordBreak: "break-word" });
+    titleSpan.textContent = rec.title;
+    row.appendChild(titleSpan);
+
+    const badgeWrap = document.createElement("span");
+    badgeWrap.innerHTML = dueBadge(rec);
+    row.appendChild(badgeWrap);
+
+    if (rec.domain) {
+      const domainPill = document.createElement("span");
+      domainPill.innerHTML = pill(rec.domain, dc);
+      row.appendChild(domainPill);
+    }
+
+    container.appendChild(row);
+  }
+
+  // Discover plan notes once. Vault-root-agnostic: scan all pages and keep
+  // plan notes whose containing folder is named "plans". Matching by folder
+  // name (not a "/plans/" path substring) works whether the vault is rooted
+  // at the repo (folder "tasks/plans") or at the tasks dir itself (folder
+  // "plans"), where the path has no leading slash before "plans".
+  let planPages = [];
+  try {
+    planPages = dv.pages().where(p => {
+      if (p.type !== "plan" || !p["plan-date"]) return false;
+      const folder = (p.file && p.file.folder ? String(p.file.folder) : "").toLowerCase();
+      return folder === "plans" || folder.endsWith("/plans");
+    });
+  } catch (_) { planPages = []; }
+
+  // Pick a plan note for a panel config.
+  //  - cfg.dateISO present → exact plan-date match (e.g. today vs tomorrow).
+  //  - otherwise            → the most recent note of that mode (by plan-date desc).
+  function findPlanForPanel(cfg) {
+    let matches = planPages.filter(p => (p.mode || "day") === cfg.mode);
+    if (cfg.dateISO) matches = matches.filter(p => planDateISO(p) === cfg.dateISO);
+    const arr = matches.sort(p => planDateISO(p), "desc");
+    return (arr && arr.length > 0) ? arr[0] : null;
+  }
+
+  // Render one plan panel (header + body) for a given mode config.
+  async function renderPlanPanel(cfg) {
+    const headerEl = document.createElement("div");
+    applyStyles(headerEl, {
+      fontSize: "13px",
+      fontWeight: "700",
+      color: "#6b7280",
+      marginBottom: "8px",
+      paddingBottom: "4px",
+      borderBottom: "2px solid rgba(107,114,128,0.2)",
+    });
+    headerEl.textContent = cfg.header;
+    planSection.appendChild(headerEl);
+
+    const planPage = findPlanForPanel(cfg);
+    if (!planPage) {
+      const emptyPlan = document.createElement("div");
+      applyStyles(emptyPlan, {
+        fontSize: "12px", color: "#9ca3af", fontStyle: "italic", marginBottom: "20px",
+      });
+      emptyPlan.textContent = cfg.emptyText;
+      planSection.appendChild(emptyPlan);
+      return;
+    }
+
+    const planFile = app.vault.getAbstractFileByPath(planPage.file.path);
+    if (!planFile) {
+      const missingMsg = document.createElement("div");
+      applyStyles(missingMsg, {
+        fontSize: "12px", color: "#9ca3af", fontStyle: "italic", marginBottom: "20px",
+      });
+      missingMsg.textContent = "Plan note found but could not be read from vault.";
+      planSection.appendChild(missingMsg);
+      return;
+    }
+
+    const planDt = DateTime.fromISO(planDateISO(planPage));
+    const rawContent = await app.vault.read(planFile);
+    const lines = rawContent.split("\n");
+
+    // Parse the plan note's sections.
+    let inToday = false, inFollowing = false, inFulltime = false, currentDayHeader = null;
+    const todayLines = [];
+    const fulltimeLines = [];          // weekend mode: ## Full-time (optional)
+    const followingDays = {};          // date string → [rawLine, ...]
+    const followingOrder = [];
+
+    for (const line of lines) {
+      if (/^## Today\s*$/.test(line)) {
+        inToday = true; inFollowing = false; inFulltime = false; currentDayHeader = null; continue;
+      }
+      if (/^## Following days\s*$/i.test(line)) {
+        inToday = false; inFollowing = true; inFulltime = false; continue;
+      }
+      if (/^## Full-time/i.test(line)) {
+        inToday = false; inFollowing = false; inFulltime = true; continue;
+      }
+      if (/^## /.test(line)) {
+        inToday = false; inFollowing = false; inFulltime = false; continue;
+      }
+      if (inFollowing && /^### (\d{4}-\d{2}-\d{2})\s*$/.test(line)) {
+        const dm = line.match(/^### (\d{4}-\d{2}-\d{2})/);
+        currentDayHeader = dm[1];
+        if (!followingDays[currentDayHeader]) {
+          followingDays[currentDayHeader] = [];
+          followingOrder.push(currentDayHeader);
+        }
+        continue;
+      }
+      const parsed = parsePlanLine(line.trim());
+      if (!parsed) continue;
+      if (inToday) todayLines.push(parsed);
+      else if (inFulltime) fulltimeLines.push(parsed);
+      else if (inFollowing && currentDayHeader) followingDays[currentDayHeader].push(parsed);
+    }
+
+    // Primary group (Today for day, Week-of for week, Weekend for weekend).
+    const todayGroup = document.createElement("div");
+    applyStyles(todayGroup, { marginBottom: "12px" });
+
+    const todayLabel = document.createElement("div");
+    applyStyles(todayLabel, { fontSize: "12px", fontWeight: "700", color: "#2563eb", marginBottom: "4px" });
+    if (cfg.mode === "weekend") {
+      todayLabel.textContent = "Weekend Plan";
+    } else if (cfg.mode === "week") {
+      todayLabel.textContent = "Week of " + (planDt.isValid ? planDt.toFormat("MMM dd") : planDateISO(planPage));
+    } else {
+      todayLabel.textContent = planDt.isValid ? planDt.toFormat("EEE MMM dd") : planDateISO(planPage);
+    }
+    todayGroup.appendChild(todayLabel);
+
+    if (todayLines.length === 0) {
+      const emptyToday = document.createElement("div");
+      applyStyles(emptyToday, { fontSize: "12px", color: "#9ca3af", fontStyle: "italic" });
+      emptyToday.textContent = cfg.mode === "weekend"
+        ? "No tasks planned for this weekend."
+        : "No tasks planned.";
+      todayGroup.appendChild(emptyToday);
+    } else {
+      for (const rl of todayLines) renderPlanRow(rl, todayGroup, cfg.badgeLabel);
+    }
+    planSection.appendChild(todayGroup);
+
+    // Full-time (optional) group — weekend mode only.
+    if (cfg.mode === "weekend" && fulltimeLines.length > 0) {
+      const ftLabel = document.createElement("div");
+      applyStyles(ftLabel, { fontSize: "12px", fontWeight: "700", color: "#6b7280", marginTop: "8px", marginBottom: "4px" });
+      ftLabel.textContent = "Full-time (optional)";
+      planSection.appendChild(ftLabel);
+
+      const ftGroup = document.createElement("div");
+      applyStyles(ftGroup, { marginBottom: "8px", paddingLeft: "8px" });
+      for (const rl of fulltimeLines) renderPlanRow(rl, ftGroup, cfg.badgeLabel);
+      planSection.appendChild(ftGroup);
+    }
+
+    // Following days group — week mode only.
+    if (cfg.mode === "week" && followingOrder.length > 0) {
+      const followLabel = document.createElement("div");
+      applyStyles(followLabel, { fontSize: "12px", fontWeight: "700", color: "#6b7280", marginTop: "8px", marginBottom: "4px" });
+      followLabel.textContent = "Following days";
+      planSection.appendChild(followLabel);
+
+      for (const dayKey of followingOrder) {
+        const dayGroup = document.createElement("div");
+        applyStyles(dayGroup, { marginBottom: "8px", paddingLeft: "8px" });
+
+        const dayDt = DateTime.fromISO(dayKey);
+        const dayLabel = document.createElement("div");
+        applyStyles(dayLabel, { fontSize: "11px", fontWeight: "600", color: "#9ca3af", marginBottom: "3px" });
+        dayLabel.textContent = dayDt.isValid ? dayDt.toFormat("EEE MMM dd") : dayKey;
+        dayGroup.appendChild(dayLabel);
+
+        for (const rl of followingDays[dayKey]) renderPlanRow(rl, dayGroup, cfg.badgeLabel);
+        planSection.appendChild(dayGroup);
+      }
+    }
+
+    // Plan metadata footer.
+    const planFooter = document.createElement("div");
+    applyStyles(planFooter, { fontSize: "11px", color: "#9ca3af", marginTop: "6px", marginBottom: "20px" });
+    planFooter.textContent = "Plan: " + planPage.file.path;
+    planSection.appendChild(planFooter);
+  }
+
+  try {
+    // Render the three plan panels in sequence, each from its own latest note.
+    const todayISO    = today.toISODate();
+    const tomorrowISO = today.plus({ days: 1 }).toISODate();
+    await renderPlanPanel({ mode: "day",     dateISO: todayISO,    header: "📅 Today's Plan",      emptyText: "No plan for today — run /plan-day.",                     badgeLabel: "Today" });
+    await renderPlanPanel({ mode: "day",     dateISO: tomorrowISO, header: "⏭️ Tomorrow's Plan",   emptyText: "No plan for tomorrow yet — run /plan-day for tomorrow.", badgeLabel: "Tomorrow" });
+    await renderPlanPanel({ mode: "week",    header: "🗓️ This Week's Plan",  emptyText: "No weekly plan yet — run /plan-week.",                       badgeLabel: "This Week" });
+    await renderPlanPanel({ mode: "weekend", header: "🌅 Weekend Plan",      emptyText: "No weekend plan yet — run /plan-weekend.",                   badgeLabel: "Weekend" });
+  } catch (planErr) {
+    // Plan panel errors must not crash the rest of the dashboard.
+    const errMsg = document.createElement("div");
+    applyStyles(errMsg, { fontSize: "12px", color: "#dc2626", fontStyle: "italic", marginBottom: "20px" });
+    errMsg.textContent = "Plan panel error: " + planErr.message;
+    planSection.appendChild(errMsg);
+  }
 
   // ─── Section 8a: Quick Capture form ─────────────────────────────────────
   // Appends a raw `- [ ] <text>` line to tasks/inbox.md.
@@ -723,6 +1004,11 @@ try {
       dueBadge(r) +
       `<span style="font-size:11px;color:#9ca3af;padding:1px 5px;">${esc(effortLabel)}</span>` +
       (r.context ? `<span style="font-size:10px;color:#9ca3af;margin-left:4px;">${esc(r.context)}</span>` : "");
+    const _sched = scheduledTitles.get((r.title || "").toLowerCase().trim());
+    if (_sched) {
+      metaRow.innerHTML += pill("📅 " + _sched,
+        { bg: "rgba(37,99,235,0.15)", text: "#2563eb", border: "rgba(37,99,235,0.5)" });
+    }
     card.appendChild(metaRow);
 
     // Controls row: Move ▸ select + Done button + Won't Fix button
