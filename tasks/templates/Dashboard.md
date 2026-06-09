@@ -64,6 +64,21 @@ const domainColors = {
 };
 
 try {
+  // ── Midnight rollover: clear any stale timer/listener from a prior block run ──
+  try {
+    if (dv.container) {
+      if (dv.container.__ggtdMidnightTimer) {
+        clearTimeout(dv.container.__ggtdMidnightTimer);
+        dv.container.__ggtdMidnightTimer = null;
+      }
+      if (dv.container.__ggtdDayWatch) {
+        document.removeEventListener("visibilitychange", dv.container.__ggtdDayWatch);
+        window.removeEventListener("focus", dv.container.__ggtdDayWatch);
+        dv.container.__ggtdDayWatch = null;
+      }
+    }
+  } catch (_) {}
+
   // ─── Section 2: Collect open tasks ──────────────────────────────────────
 
   // Accept tasks from domain files or any file under /tasks/; exclude inbox, templates, and plans.
@@ -1422,6 +1437,39 @@ try {
     details.appendChild(tableWrapper);
     tableSection.appendChild(details);
   }
+
+  // ── Midnight rollover: keep the dashboard's date in sync with the wall clock ──
+  // Forces a full re-render (recomputing today/overdue/due-soon + the Today/Tomorrow
+  // plan panels) at the next local midnight, and again whenever the window regains
+  // focus on a new calendar day (covers the machine sleeping across midnight).
+  try {
+    const ggtdRebuild = () => {
+      try { app?.commands?.executeCommandById?.("dataview:dataview-rebuild-current-view"); } catch (_) {}
+    };
+    // (1) one-shot timer to ~2s after the next local midnight; the rebuild re-runs
+    //     this block, which re-arms the next day's timer.
+    if (typeof setTimeout === "function" && dv.container) {
+      const msToMidnight = Math.max(
+        today.plus({ days: 1 }).toMillis() - DateTime.now().toMillis() + 2000,
+        1000
+      );
+      dv.container.__ggtdMidnightTimer = setTimeout(ggtdRebuild, msToMidnight);
+    }
+    // (2) focus/visibility re-check: rebuild only if the day actually changed since
+    //     this render (cheap; avoids needless rebuilds on every focus).
+    if (dv.container && typeof document !== "undefined") {
+      const renderedDayMs = todayMs;
+      const ggtdDayWatch = () => {
+        try {
+          if (document.visibilityState && document.visibilityState !== "visible") return;
+          if (DateTime.now().startOf("day").toMillis() !== renderedDayMs) ggtdRebuild();
+        } catch (_) {}
+      };
+      dv.container.__ggtdDayWatch = ggtdDayWatch;
+      document.addEventListener("visibilitychange", ggtdDayWatch);
+      window.addEventListener("focus", ggtdDayWatch);
+    }
+  } catch (_) {}
 
 } catch (e) {
   // Graceful degradation when Dataview or luxon is not available.
