@@ -403,18 +403,20 @@ try {
 
   const inboxSection = dv.el("div", "");
 
-  // Collect open inbox items using Dataview pages for the inbox file.
+  // Collect open inbox items from the live inbox only (never the template).
+  // Uses the same resolveInboxFile() logic so the two paths stay in sync.
   let inboxItems = [];
   try {
-    const inboxPages = dv.pages().filter(p => {
-      const pp = (p.file.path || "").toLowerCase();
-      return pp.endsWith("inbox.md");
-    });
-    inboxPages.forEach(p => {
-      p.file.tasks
-        .filter(t => t.status === " ")
-        .forEach(t => inboxItems.push(t.text || ""));
-    });
+    const liveInboxFile = resolveInboxFile();
+    if (liveInboxFile) {
+      const livePath = liveInboxFile.path;
+      const inboxPages = dv.pages().filter(p => p.file.path === livePath);
+      inboxPages.forEach(p => {
+        p.file.tasks
+          .filter(t => t.status === " ")
+          .forEach(t => inboxItems.push(t.text || ""));
+      });
+    }
   } catch (_) {
     // If Dataview can't read the inbox, show nothing rather than crashing.
   }
@@ -514,19 +516,31 @@ try {
     }
   }
 
-  // resolveInboxFile: vault-root-agnostic lookup for the inbox.md file.
-  // Prefers a file whose path contains "tasks/"; falls back to any file
-  // whose path ends with "inbox.md".  Returns null if nothing found.
+  // resolveInboxFile: vault-root-agnostic lookup for the live inbox.md.
+  // Selection rules (in priority order):
+  //   1. basename must be exactly "inbox.md"
+  //   2. path must NOT contain a "templates/" segment (case-insensitive)
+  //   3. among qualifying files, prefer: (a) path ending "tasks/inbox.md";
+  //      (b) path containing "tasks/"; (c) any other inbox.md
+  // If only a templates/inbox.md exists, returns null so the caller Notices.
   function resolveInboxFile() {
     const files = app.vault.getFiles();
-    let fallback = null;
-    for (const f of files) {
+    // candidates: inbox.md files that are NOT under any templates/ directory
+    const candidates = files.filter(f => {
+      if (f.name !== "inbox.md") return false;
       const p = f.path.toLowerCase();
-      if (!p.endsWith("inbox.md")) continue;
-      if (p.includes("tasks/")) return f;
-      if (!fallback) fallback = f;
-    }
-    return fallback;
+      // exclude paths like "tasks/templates/inbox.md" or "templates/inbox.md"
+      return !/(^|\/|\\)templates(\/|\\)/i.test(p);
+    });
+    if (candidates.length === 0) return null;
+    // (a) exact suffix tasks/inbox.md
+    const exactMatch = candidates.find(f => f.path.toLowerCase().endsWith("tasks/inbox.md"));
+    if (exactMatch) return exactMatch;
+    // (b) path contains tasks/
+    const tasksMatch = candidates.find(f => f.path.toLowerCase().includes("tasks/"));
+    if (tasksMatch) return tasksMatch;
+    // (c) any remaining inbox.md
+    return candidates[0];
   }
 
   // setField(line, key, value): replace existing key:token or append  key:value
