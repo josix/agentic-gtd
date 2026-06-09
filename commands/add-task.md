@@ -42,7 +42,9 @@ Detect backward-compat signals:
 - If the **first token** is a known domain alias (`fulltime`, `parttime`, `part-time`, `pt`, `side`, `side-projects`, `oss`, `open-source`, `knowledge`), capture it as the explicit domain seed.
 - If any `key:value` tags are present (`prio:`, `project:`, `effort:`, `due:`, `context:`), capture them as explicit tag seeds.
 
-Recognized seed keys: `prio`, `project`, `effort`, `due`, `context`.
+Recognized seed keys: `prio`, `project`, `effort`, `due`, `context`, `recurs`, `last`.
+
+A `recurs:<interval>` seed (e.g. `recurs:3d`, `recurs:weekly`) marks the task as a recurring standing review — pass it through verbatim to the written line. When `recurs:` is supplied, prefer NOT to also write a `due:` (the due is derived from `recurs`/`last`); if the user gave both, keep `recurs:` and warn that `due:` is ignored for recurring tasks. A `last:<YYYY-MM-DD>` seed (last completed date) may accompany `recurs:`; if omitted on a new recurring task, leave it off (the task is treated as never-done and surfaces immediately).
 
 The user is NOT required to provide a domain token or any key:value tags upfront — the Triage subagent will infer them.
 
@@ -105,9 +107,9 @@ Overlay the user's answers from Call 1 (Action / Domain / Priority / ETA) and Ca
 1. Read the target `tasks/<domain>.md` file (using Read tool).
 2. Construct the well-formed task line. Tag order must follow the file header:
    ```
-   - [ ] <title>  prio:<value>  [project:<value>]  [effort:<value>]  [impact:<value>]  [due:<value>]  [context:<value>]
+   - [ ] <title>  prio:<value>  [project:<value>]  [effort:<value>]  [impact:<value>]  [due:<value>]  [recurs:<value>]  [last:<value>]  [context:<value>]
    ```
-   Use double-space separators. Emit only populated tags. `impact` appears only for `fulltime` or `parttime` domains.
+   Use double-space separators. Emit only populated tags. `impact` appears only for `fulltime` or `parttime` domains. `recurs:`/`last:` appear only for recurring tasks; when `recurs:` is present, omit `due:`.
 3. APPEND the new line at the end of the file (after the last existing line).
 4. NEVER reorder, reformat, or rewrite any existing lines. Append-only.
 

@@ -25,9 +25,10 @@ Example:
 3. **Invoke gtd-prioritization skill in WEEKEND mode**:
 
    **a. Weekly Review sweep** (emit FIRST, before the ranked plan):
-   - Identify overdue tasks: `due < today` (ISO date comparison). Flag with `[OVERDUE]`.
-   - Identify stale tasks: no `due` date AND no `project` tag. Flag as potentially stale.
-   - Identify missing/invalid-metadata tasks: missing `prio`, `effort`, or `due`. List which fields are absent.
+   - Identify overdue tasks: `due < today` (ISO date comparison). Flag with `[OVERDUE]`. For recurring tasks (`recurs:`), compare effective due (`last + interval`) `< today`.
+   - Identify stale tasks: no `due` date AND no `project` tag. Flag as potentially stale. Recurring tasks are NEVER stale — exclude them.
+   - Identify missing/invalid-metadata tasks: missing `prio`, `effort`, or `due`. List which fields are absent. Do NOT flag a recurring task for a missing `due` (it derives from `recurs`/`last`).
+   - Recurrence eligibility (effective due ≤ today) applies to the ranked plan below, just like daily mode.
 
    **b. Rank tasks using weekend domain weighting**:
    - Domain tie-break order (weekend, reversed from daily): `side-projects` < `open-source` < `knowledge` < `parttime` < `fulltime`

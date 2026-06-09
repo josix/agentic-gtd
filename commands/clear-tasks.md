@@ -18,6 +18,18 @@ Clear open tasks by resolving them. "Clearing" means marking a task **DONE** or 
 - `resolved:` date is determined at runtime from the system clock.
 - Append the resolution tags at the END of the existing task line, using the same double-space separator. Do NOT remove or reorder the task's existing tags.
 
+### Recurring tasks (`recurs:` present) — DONE means "log a pass", not "retire"
+
+A task carrying a `recurs:` tag is a standing review (see the gtd-prioritization skill's **Recurring Tasks** section). Its DONE semantics are different:
+
+| Resolution on a recurring task | Checkbox change | Edit applied |
+|--------------------------------|-----------------|--------------|
+| DONE (completed this cycle)    | **stays `- [ ]`** | set/update `last:<YYYY-MM-DD>` to today — this rolls the next occurrence forward by one interval. Do NOT add `resolution:`/`resolved:`, do NOT flip the checkbox. |
+| WON'T FIX (stop recurring)     | `- [ ]` → `- [-]` | `resolution:wontfix  resolved:<YYYY-MM-DD>` — retires the standing task as normal. |
+
+- For a recurring DONE: if a `last:` tag already exists, replace ONLY its date value; if absent, append `  last:<YYYY-MM-DD>` at the end. Leave `recurs:` and every other tag untouched.
+- Confirm a recurring DONE as a roll-forward, e.g. `Logged pass: <title> — last:2026-06-09, next due 2026-06-12`.
+
 ## Argument Parsing
 
 Parse `$ARGUMENTS`:
@@ -53,8 +65,8 @@ Parse `$ARGUMENTS`:
    - Optionally also ask a free-text **Note**: if provided, append it as `note:"<text>"` — keep it short; omit if empty.
 
 5. **Apply edits (in place, surgical)**: for each selected task, use Edit to change ONLY that line:
-   - Replace the leading `- [ ]` with `- [x]` (DONE) or `- [-]` (WON'T FIX).
-   - Append `  resolution:<done|wontfix>  resolved:<YYYY-MM-DD>` (and `  note:"..."` if given) at the end of the line.
+   - **Recurring task + DONE** (task line contains a `recurs:` tag and the resolution is DONE): do NOT flip the checkbox and do NOT append `resolution:`/`resolved:`. Instead set/update `last:<YYYY-MM-DD>` to today (replace the existing `last:` value, or append `  last:<date>` if none). This is the only case where the line stays `- [ ]`.
+   - **All other cases** (non-recurring, or recurring + WON'T FIX): replace the leading `- [ ]` with `- [x]` (DONE) or `- [-]` (WON'T FIX), and append `  resolution:<done|wontfix>  resolved:<YYYY-MM-DD>` (and `  note:"..."` if given) at the end of the line.
    - The `old_string` for each Edit MUST be the exact full existing line so the match is unique; NEVER touch any other line, the header, or other tasks.
 
 6. **Confirm**:

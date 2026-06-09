@@ -29,9 +29,9 @@ If an unrecognized token appears, emit a warning but continue with defaults for 
 
 3. **Invoke gtd-prioritization skill in DAILY mode**:
    - Parse all incomplete task lines using regex `^- \[ \] (.+)$`.
-   - Extract and normalize all tags per the skill's grammar.
-   - Apply Engage filters in order: effort filter, context filter, energy filter.
-   - Rank surviving tasks using the strict five-level tiebreak algorithm.
+   - Extract and normalize all tags per the skill's grammar (including `recurs:`/`last:` for recurring tasks).
+   - Apply Engage filters in order: recurrence filter (drop recurring tasks whose effective due `last + interval` is after today, reason `recurs-not-due`), effort filter, context filter, energy filter.
+   - Rank surviving tasks using the strict five-level tiebreak algorithm. Recurring tasks rank by their effective due.
    - Greedily fill up to `hours * 60` minutes of effort.
 
 4. **Emit output** using the Daily Plan format from the skill:
@@ -52,5 +52,6 @@ If an unrecognized token appears, emit a warning but continue with defaults for 
 
 - Inbox (`tasks/inbox.md`) is NEVER read — skip it by basename check.
 - Tasks with `prio` missing or invalid get rank 99 and a warning.
+- Recurring tasks (`recurs:` tag) only appear when their effective due (`last + interval`, or today if never done) is on/before today; otherwise they are listed under Deferred with reason `recurs-not-due`.
 - If `hours` results in zero tasks fitting, still emit the heading and an empty numbered list, then populate Deferred with all tasks.
 - Today's date is determined at runtime from the system clock.

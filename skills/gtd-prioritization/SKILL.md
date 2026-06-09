@@ -26,7 +26,7 @@ Lines matching `- [x]` (completed) and all comment lines or non-task lines are i
 
 **Tag extraction**: apply global regex `(\w+):(\S+)` to the full task line. All key:value pairs after the title are tags.
 
-**Recognized tag keys**: `prio`, `project`, `effort`, `impact`, `due`, `context`
+**Recognized tag keys**: `prio`, `project`, `effort`, `impact`, `due`, `context`, `recurs`, `last`
 
 **Normalization rules**:
 
@@ -42,6 +42,25 @@ Lines matching `- [x]` (completed) and all comment lines or non-task lines are i
   - Malformed due → `no-due` + warning added to output
 - **context → comma-separated list**, each element normalized to lowercase with leading `@` (e.g. `@computer`, `@phone`)
 - **prio**: must match controlled vocabulary; unrecognized or missing → rank 99 + warning
+- **recurs → interval in days** (marks a standing/recurring task):
+  - `Nd` → N days (e.g. `3d` → 3)
+  - `Nw` → N×7 days (e.g. `1w` → 7, `2w` → 14)
+  - keywords: `daily` → 1, `weekly` → 7, `biweekly` → 14, `monthly` → 30
+  - Unparseable → ignore `recurs` (treat as a normal one-shot task) + warning
+- **last → ISO date** (`YYYY-MM-DD`): the date the task was most recently completed. Only meaningful alongside `recurs`. Unparseable or missing → treated as **never done**.
+
+## Recurring Tasks
+
+A task carrying a `recurs:` tag is a **standing review**, not a one-shot next-action. It is never "completed" permanently; it comes due again every interval.
+
+- **Effective due** (used everywhere a normal task's `due` would be — ranking proximity, overdue detection):
+  - `recurs` + `last` present → `effective_due = last + interval` (in days).
+  - `recurs` present, `last` absent (never done) → `effective_due = today` (surfaces immediately).
+  - A plain `due:` tag is **ignored** when `recurs:` is present; if both appear, emit a warning and use the recurrence-derived effective due.
+- **Eligibility (planning filter)**: a recurring task is eligible only when `effective_due <= today`. If `effective_due > today` it is dropped from the plan with reason `recurs-not-due` and listed under Deferred / filtered out (it is simply not due yet). Eligible recurring tasks still pass through the effort/context/energy filters normally.
+- **Ranking**: an eligible recurring task ranks exactly like any other task, using its `effective_due` for the due-proximity tiebreak (so an overdue standing review sorts early).
+- **Completion semantics** (see `/clear-tasks`): marking a recurring task DONE does **not** flip it to `- [x]`. It stays `- [ ]` and its `last:` is set/updated to the completion date — which rolls the next `effective_due` forward by one interval. Only WON'T FIX retires a recurring task (flips to `- [-]`, stopping the recurrence).
+- **Weekly Review sweep**: recurring tasks are flagged `[OVERDUE]` by `effective_due < today`. They are NEVER counted as "stale" (a cadence is an update signal) and are NOT flagged for a missing `due` (their due is derived from `recurs`/`last`).
 
 ## Priority Rank Map
 
@@ -63,7 +82,7 @@ The rank is NEVER overridden by any other field. This ladder is strict.
 Apply these criteria in order until a winner is determined:
 
 1. **prio rank ascending** — rank 1 before rank 7; rank 99 always last. NEVER overridden.
-2. **due-date proximity** — earlier due date first; `no-due` tasks sort after all dated tasks.
+2. **due-date proximity** — earlier due date first; `no-due` tasks sort after all dated tasks. For recurring tasks (`recurs:` present), use the **effective due** (`last + interval`) here.
 3. **effort ascending** — smaller effort first; `unknown` effort sorts last.
 4. **domain order** (daily mode tie-break): `fulltime` < `parttime` < `side-projects` < `open-source` < `knowledge`. In weekend mode, step 4 (domain tie-break) is REPLACED by the Weekend domain tie-break defined in Weekend Mode Step (b): `side-projects` < `open-source` < `knowledge` < `parttime` < `fulltime`. Steps 1–3 and 5 are identical in both modes.
 5. **alphabetical by title** — ensures total order (case-insensitive, ascending).
@@ -73,6 +92,7 @@ Apply these criteria in order until a winner is determined:
 **Arguments**: `hours` (default: 8), `energy` (default: `med`), `context` (default: any)
 
 **Filter steps** (applied before ranking):
+0. **Recurrence filter**: for any task with a `recurs:` tag, compute its effective due (`last + interval`, or today if never done). Drop it when `effective_due > today` (reason: `recurs-not-due`); keep it when `effective_due <= today`. Non-recurring tasks skip this step.
 1. **Effort filter**: drop any task whose effort in minutes > remaining hours converted to minutes. If effort is `unknown`, treat as large (assume 240m for filtering unless hours param makes it obviously too large).
 2. **Context filter**: if a context argument is given, drop tasks whose `context` tag does not intersect the requested context list. Tasks with no context tag pass through when no context filter is active.
 3. **Energy filter**:
@@ -92,9 +112,11 @@ Tasks filtered out (by context/energy/effort) AND tasks that didn't fit in hours
 
 **Step (a) — Weekly Review sweep FIRST**:
 Before building the plan, emit `## Weekly Review sweep` listing:
-- **Overdue tasks**: tasks with `due < today` (ISO comparison). Flag with `[OVERDUE]`.
-- **Stale tasks**: tasks with no updates detected (heuristic: no due date and no project tag — flag as potentially stale).
-- **Missing/invalid-metadata tasks**: tasks lacking `prio`, `effort`, or `due`. List each with the specific missing fields.
+- **Overdue tasks**: tasks with `due < today` (ISO comparison). Flag with `[OVERDUE]`. For recurring tasks, compare `effective_due < today`.
+- **Stale tasks**: tasks with no updates detected (heuristic: no due date and no project tag — flag as potentially stale). Recurring tasks (`recurs:` present) are NEVER stale — exclude them.
+- **Missing/invalid-metadata tasks**: tasks lacking `prio`, `effort`, or `due`. List each with the specific missing fields. Do NOT flag a recurring task for a missing `due` (its due is derived from `recurs`/`last`); a recurring task missing `recurs` parse or `last` may be noted instead.
+
+The recurrence eligibility filter (effective_due ≤ today) also applies to the weekend ranked plan, identically to daily mode Step 0.
 
 **Step (b) — Weekend domain tie-break** (reverses daily order):
 Domain priority for weekend: `side-projects` < `open-source` < `knowledge` < `parttime` < `fulltime`
@@ -118,7 +140,7 @@ Primary prio ordering is identical to daily (rank 1–7, 99 last).
 ...
 
 ## Deferred / filtered out
-- Title — domain (reason: over-time | low-energy | context-mismatch)
+- Title — domain (reason: over-time | low-energy | context-mismatch | recurs-not-due)
 ...
 
 ## Warnings
