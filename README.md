@@ -245,6 +245,86 @@ The **primary sort key** (prio rank) is identical in both modes.
 
 ---
 
+## Obsidian view (interactive local UI)
+
+### What it is
+
+An interactive visual dashboard that renders your open tasks as a ranked Board + Table directly inside Obsidian, with in-place editing capabilities. It reads and writes the same `tasks/*.md` files that the slash-commands use — markdown remains the single source of truth.
+
+### Capture → triage loop
+
+The dashboard includes a **➕ Quick capture** form at the top. Type any raw thought and click "Add to inbox" (or press Enter) — the item is appended to `tasks/inbox.md` immediately. The **📥 Inbox · needs triage** section below the form lists all open inbox items so you can see what is waiting.
+
+To clarify and file those items:
+
+1. Click **"Copy triage command"** in the dashboard — it copies `/triage-inbox` to your clipboard.
+2. Paste `/triage-inbox` in Claude Code and run it.
+
+`/triage-inbox` delegates each raw inbox item to the Triage agent, batches the proposals into a single confirmation, and — after you confirm — appends the well-formed task lines to the correct domain files and marks the corresponding inbox lines `[x]` in place.
+
+**Invariants:**
+- `tasks/inbox.md` is raw capture only — append-only, never read by planning or sync commands.
+- Inbox lines are marked, never deleted. The append-only audit trail is always preserved.
+- Markdown stays the single source of truth throughout.
+
+**Three edit capabilities:**
+
+1. **Resolve (Done / Won't Fix)** — every board card and every table row has ✓ Done and ✗ Won't Fix buttons. Clicking confirms with a dialog, then rewrites the source task line in place: marks the checkbox `[x]` or `[-]`, appends `resolution:` and `resolved:` tags. Recurring tasks (`recurs:` present) handle Done differently: the checkbox stays `[ ]` and only `last:` is updated to today (rolling the cycle forward), mirroring `/clear-tasks` semantics exactly.
+2. **Edit fields inline (table rows)** — each row exposes live controls: a `<select>` for priority (7 tiers), a date picker for `due:`, a text input for `effort:` (validated against `\d+(\.\d+)?[hm]`), and a text input for `context:`. Changing any control rewrites only that field token in the source line. Clearing a field removes the token entirely.
+3. **Reprioritize via board** — each board card has a "Move ▸" `<select>` listing the 7 priority tiers. Changing it rewrites `prio:` in the source line; on auto-refresh the card moves to the new column.
+
+All writes go directly to the source `.md` file via `app.vault.process` (atomic) or `app.vault.modify`. Dataview auto-rerenders the block after each write. No hard-delete control exists anywhere — resolve tasks via the buttons, never by deleting lines.
+
+### Prerequisites
+
+- **Dataview plugin with DataviewJS enabled** (required) — install via Settings → Community plugins → Browse → search "Dataview", then go to Dataview settings and turn on **"Enable JavaScript Queries"**. Without this setting the interactive block will not execute.
+- **Tasks** (optional, recommended) — enables checkbox status cycling directly inside Obsidian notes.
+
+### Setup
+
+**Step (a) — Open the vault**
+
+Open the repo root folder (or just the `tasks/` sub-folder) as an Obsidian vault.
+
+**Step (b) — Install community plugins**
+
+Install Dataview and enable JavaScript Queries as described above.
+
+**Step (c) — Open the dashboard**
+
+Open `tasks/templates/Dashboard.md`. Dataview renders it live. The dashboard shows:
+- A **Summary bar** with stat pills (total open, overdue, due this week, per-domain counts).
+- A **Board** grouped by priority tier, each card with Move ▸ reprioritize + ✓ Done + ✗ Won't Fix controls.
+- A **Table** grouped by domain (collapsible), each row with inline priority, due, effort, context editors plus ✓ / ✗ resolve buttons.
+
+The dashboard is git-tracked and safe to push. Live task data (`tasks/*.md`) remains gitignored.
+
+### MCP integration
+
+This plugin ships `.mcp.json` at the repo root, which declares an `obsidian` MCP server using MarkusPfundstein's [`mcp-obsidian`](https://github.com/MarkusPfundstein/mcp-obsidian) package. When active, Claude can read and append to vault notes via `mcp__obsidian__*` tools (e.g. `obsidian_get_file_contents`, `obsidian_patch_content`).
+
+**To enable:**
+
+1. Install the **Local REST API** community plugin in Obsidian and enable it. It will display an API key.
+2. Copy that API key.
+3. Export it in your shell environment before launching Claude Code:
+   ```sh
+   export OBSIDIAN_API_KEY="<your-key-here>"
+   ```
+   The key must never be committed. It is read at runtime from `${OBSIDIAN_API_KEY}` in `.mcp.json`.
+
+Default connection: host `127.0.0.1`, port `27124` (Local REST API defaults). Change these via the same plugin's settings if needed.
+
+Claude Code auto-discovers `.mcp.json` at the repo root, so no further plugin.json wiring is required.
+
+### Caveats
+
+- **No hard-deletes.** Obsidian lets you delete lines freely — resist the urge. This plugin's convention is **append-only + resolve buttons (or `/clear-tasks`) to retire tasks**. Deleting a task line loses history and breaks the append-only audit trail. The dashboard exposes no delete control.
+- **Single-colon tag format.** The dashboard's DataviewJS parses `key:value` (single colon, double-space-separated). Vanilla Dataview field auto-parse requires `key:: value` (double colon). Do **not** switch to double-colon format unless you intend to change every planning command that reads the files.
+- **Line-drift guard.** The write primitive validates that the target line still looks like a task checkbox before applying any edit. If the dashboard was open while you edited the source file externally and lines shifted, writes are safely aborted with a notice to reopen the dashboard.
+
+---
+
 ## FAQ: missing tags
 
 **What happens if `prio:` is missing?**
