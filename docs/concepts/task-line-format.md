@@ -28,8 +28,10 @@ Tags are **double-space-separated** from the description and from each other. Si
 | `context` | No | `@computer`, `@phone`, `@errand`, etc. (comma-separated) | Used for context filter in `/plan-day` |
 | `recurs` | No | duration string, e.g. `7d`, `14d` | Marks a recurring task; pairs with `last:` |
 | `last` | No | `YYYY-MM-DD` | Date of last completion; used with `recurs` to compute effective due |
-| `resolution` | No | `done`, `wont-fix` | Written by dashboard resolve buttons; do not set manually |
+| `resolution` | No | `done`, `wontfix` | Written by dashboard resolve buttons; do not set manually |
 | `resolved` | No | `YYYY-MM-DD` | Date resolution was applied; written by dashboard |
+| `blocked` | No | `true` (presence only) | Set/cleared by the dashboard Block toggle; omitted when unblocked |
+| `status` | No | `in-progress` | Set/cleared by the dashboard Status Board (drag or select); checkbox stays `[ ]` while in progress |
 
 ## Examples
 

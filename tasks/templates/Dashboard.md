@@ -2,11 +2,11 @@
 
 > **INTERACTIVE DASHBOARD** — Renders a GitHub-Projects-style Board + Table dashboard with in-place editing.
 > Open tasks are sourced live from `tasks/*.md` files; those files are the single source of truth.
-> **Edit capabilities**: (1) Resolve tasks as Done or Won't Fix via buttons on cards and rows; (2) Edit priority, due date, effort, and context inline in table rows; (3) Reprioritize via "Move ▸" selector on board cards. All writes go directly to the source `.md` file. Markdown stays the source of truth; resolve via buttons — never hard-delete a line.
+> **Edit capabilities**: (1) Resolve tasks as Done or Won't Fix via buttons on cards and rows; (2) Edit priority, due date, effort, and context inline in table rows; (3) Reprioritize via "Move ▸" selector on board cards; (4) Block/Unblock tasks; (5) Drag-and-drop or select tasks across Status Board columns (TODO → IN PROGRESS → DONE). All writes go directly to the source `.md` file. Markdown stays the source of truth; resolve via buttons — never hard-delete a line.
 >
 > **PREREQUISITE**: Dataview's **"Enable JavaScript Queries" (DataviewJS)** setting must be turned ON in Settings → Community plugins → Dataview for the controls to work.
 >
-> Layout: **Summary bar** (stat pills) → **Plan panels** (Today / This Week / Weekend, each showing its own latest plan note) → **Quick capture** → **Inbox** → **Board** (columns by priority tier, with Move + Resolve controls) → **Table** (grouped by domain, collapsible, with inline field editors + Resolve controls).
+> Layout: **Summary bar** (stat pills) → **Plan panels** (Today / This Week / Weekend, each showing its own latest plan note) → **Status Board** (TODO / IN PROGRESS / DONE columns, drag-and-drop) → **Quick capture** → **Inbox** → **Board** (columns by priority tier, with Move + Resolve controls) → **Table** (grouped by domain, collapsible, with inline field editors + Resolve controls).
 
 ```dataviewjs
 // ─── Section 1: Configuration ──────────────────────────────────────────────
@@ -82,7 +82,9 @@ try {
   // ─── Section 2: Collect open tasks ──────────────────────────────────────
 
   // Accept tasks from domain files or any file under /tasks/; exclude inbox, templates, and plans.
-  const allTasks = dv.pages()
+  // .array() converts DataArray → plain Array so Array.prototype.sort(compareFn) works correctly
+  // (DataArray.sort uses a key-extractor signature, not a comparator; using it with compareTasks crashes).
+  const _allTasksRaw = dv.pages()
     .flatMap(p => p.file.tasks)
     .filter(t => {
       if (t.status !== " ") return false;
@@ -95,6 +97,27 @@ try {
       const inTasksDir = path.toLowerCase().includes("/tasks/");
       return inDomain || inTasksDir;
     });
+  const allTasks = typeof _allTasksRaw.array === "function" ? _allTasksRaw.array() : Array.from(_allTasksRaw);
+
+  // ─── Section 2b: Collect resolved-today tasks (for Status Board DONE column) ─
+  // Gathers tasks where checkbox is x or - AND resolved:<todayISO>.
+  // Minimal records: enough to render a board card.
+  const _resolvedTodayRawDV = dv.pages()
+    .flatMap(p => p.file.tasks)
+    .filter(t => {
+      if (t.status !== "x" && t.status !== "-") return false;
+      const path = t.path || "";
+      const stem = path.split("/").pop().replace(/\.md$/i, "").toLowerCase();
+      if (stem === "inbox") return false;
+      if (path.toLowerCase().includes("templates")) return false;
+      if (path.toLowerCase().includes("/plans/")) return false;
+      const inDomain = domainOrder.includes(stem);
+      const inTasksDir = path.toLowerCase().includes("/tasks/");
+      return inDomain || inTasksDir;
+    });
+  const resolvedTodayRaw = typeof _resolvedTodayRawDV.array === "function"
+    ? _resolvedTodayRawDV.array()
+    : Array.from(_resolvedTodayRawDV);
 
   // ─── Section 3: Metadata extraction helpers ──────────────────────────────
 
@@ -179,6 +202,8 @@ try {
     const recurs  = extract(text, /\brecurs:(\S+)/);
     const last    = extract(text, /\blast:(\d{4}-\d{2}-\d{2})/);
     const impact  = extract(text, /\bimpact:(\S+)/);
+    const blocked = /\bblocked:true\b/.test(text);
+    const status  = extract(text, /\bstatus:(\S+)/);
 
     const title = text
       .replace(/\b\w+:\S+/g, "")
@@ -209,13 +234,54 @@ try {
 
     return {
       title, domain, prio, rank, effort, effortMin,
-      due, effectiveDueISO, context, recurs, last, impact,
+      due, effectiveDueISO, context, recurs, last, impact, blocked, status,
       duEpoch, domainIdx, project,
       // Source location for writes (t.line is 0-based line index in Dataview)
       path: t.path,
       line: t.line,
     };
   });
+
+  // Build resolved-today records now that `today` and helpers are available.
+  const todayISOStr = today.toISODate();
+  const resolvedToday = resolvedTodayRaw
+    .filter(t => {
+      const text = t.text || "";
+      const resolvedDate = extract(text, /\bresolved:(\d{4}-\d{2}-\d{2})/);
+      return resolvedDate === todayISOStr;
+    })
+    .map(t => {
+      const text = t.text || "";
+      const prio       = extract(text, /\bprio:(\S+)/);
+      const resolution = extract(text, /\bresolution:(\S+)/);
+      const title      = text.replace(/\b\w+:\S+/g, "").replace(/\s{2,}/g, " ").trim();
+      const path       = t.path || "";
+      const domain     = path.split("/").pop().replace(/\.md$/i, "").toLowerCase();
+      const due        = extract(text, /\bdue:(\d{4}-\d{2}-\d{2})/);
+      const recurs     = extract(text, /\brecurs:(\S+)/);
+      const last       = extract(text, /\blast:(\d{4}-\d{2}-\d{2})/);
+      const blocked    = /\bblocked:true\b/.test(text);
+      const duEpoch    = effectiveDueEpoch(recurs, last, due);
+      let effectiveDueISO = due || "";
+      if (recurs && last) {
+        const interval = parseInterval(recurs);
+        if (interval) {
+          const lastDt = DateTime.fromISO(last);
+          if (lastDt.isValid) effectiveDueISO = lastDt.plus(interval).toISODate();
+        }
+      } else if (recurs && !last) {
+        effectiveDueISO = todayISOStr;
+      }
+      return { title, domain, prio, resolution, due, effectiveDueISO, recurs, last, blocked, duEpoch, path, line: t.line };
+    });
+
+  // ─── Section 4b: Recurring completions for DONE column ──────────────────
+  // Recurring tasks keep their [ ] checkbox when "done" — their last: is bumped to today.
+  // They never appear in resolvedTodayRaw (which requires [x]/[-]), but the user expects
+  // to see them in DONE after completing a cycle.  Source them from `records` directly.
+  const recurringCompletedToday = records
+    .filter(r => r.recurs && r.last === todayISOStr && r.status !== "in-progress")
+    .map(r => Object.assign({}, r, { resolution: "recurring" }));
 
   // ─── Section 5: Sort comparator (strict tiebreak per SKILL.md) ───────────
 
@@ -281,6 +347,12 @@ try {
     }
     return pill(label + recurGlyph,
       { bg: "rgba(107,114,128,0.1)", text: "#6b7280", border: "rgba(107,114,128,0.3)" });
+  }
+
+  function blockedBadge(r) {
+    if (!r.blocked) return "";
+    return pill("🚫 Blocked",
+      { bg: "rgba(220,38,38,0.15)", text: "#dc2626", border: "rgba(220,38,38,0.5)" });
   }
 
   // ─── Section 7: Summary bar ──────────────────────────────────────────────
@@ -377,6 +449,7 @@ try {
     const last    = extract(text, /\blast:(\d{4}-\d{2}-\d{2})/);
     const effort  = extract(text, /\beffort:(\S+)/);
     const domain  = extract(text, /\bdomain:(\S+)/) || "";
+    const blocked = /\bblocked:true\b/.test(text);
     const title   = text.replace(/\b\w+:\S+/g, "").replace(/\s{2,}/g, " ").trim();
     const duEpoch = effectiveDueEpoch(recurs, last, due);
     let effectiveDueISO = due || "";
@@ -389,7 +462,7 @@ try {
     } else if (recurs && !last) {
       effectiveDueISO = today.toISODate();
     }
-    return { title, prio, due, context, recurs, last, effort, domain, duEpoch, effectiveDueISO };
+    return { title, prio, due, context, recurs, last, effort, domain, blocked, duEpoch, effectiveDueISO };
   }
 
   // Render a single plan task row into the given container.
@@ -423,6 +496,12 @@ try {
       const domainPill = document.createElement("span");
       domainPill.innerHTML = pill(rec.domain, dc);
       row.appendChild(domainPill);
+    }
+
+    if (rec.blocked) {
+      const blockedSpan = document.createElement("span");
+      blockedSpan.innerHTML = blockedBadge(rec);
+      row.appendChild(blockedSpan);
     }
 
     container.appendChild(row);
@@ -611,6 +690,364 @@ try {
     applyStyles(errMsg, { fontSize: "12px", color: "#dc2626", fontStyle: "italic", marginBottom: "20px" });
     errMsg.textContent = "Plan panel error: " + planErr.message;
     planSection.appendChild(errMsg);
+  }
+
+  // ─── Section 7c: Status Board — TODO / IN PROGRESS / DONE ───────────────
+  // TODO column: tasks scheduled in today's plan and not yet in-progress.
+  // IN PROGRESS column: open tasks with status:in-progress.
+  // DONE/WON'T FIX column: tasks resolved today.
+
+  // Module-scope drag payload (avoids DataTransfer serialization quirks).
+  let _dragPayload = null;
+
+  // Status write helpers.
+  async function setStatusInProgress(r) {
+    await rewriteLine(r.path, r.line, r.title, (line) => setField(line, "status", "in-progress"));
+  }
+
+  async function clearStatus(r) {
+    await rewriteLine(r.path, r.line, r.title, (line) => unsetField(line, "status"));
+  }
+
+  function rebuildView() {
+    try { app?.commands?.executeCommandById?.("dataview:dataview-rebuild-current-view"); } catch (_) {}
+  }
+
+  // Build a status-board card element.
+  function buildStatusCardEl(r, sourceCol) {
+    const dc = domainColors[r.domain] || prioColors._unknown;
+    const displayDomain = r.domain ? (r.domain.charAt(0).toUpperCase() + r.domain.slice(1)) : "—";
+    const pc = prioColors[r.prio] || prioColors._unknown;
+    const prioLabel = r.prio ? (prioLabels[r.prio] || r.prio) : null;
+
+    const card = document.createElement("div");
+    applyStyles(card, {
+      background: "var(--background-primary,#fff)",
+      border: "1px solid rgba(107,114,128,0.25)",
+      borderRadius: "8px",
+      padding: "10px 12px",
+      marginBottom: "8px",
+      boxShadow: "0 1px 3px rgba(0,0,0,0.06)",
+      cursor: sourceCol !== "done" ? "grab" : "default",
+    });
+
+    if (sourceCol !== "done") {
+      card.draggable = true;
+      card.addEventListener("dragstart", (e) => {
+        _dragPayload = { r, sourceCol };
+        card.style.opacity = "0.5";
+        if (e.dataTransfer) e.dataTransfer.effectAllowed = "move";
+      });
+      card.addEventListener("dragend", () => { card.style.opacity = "1"; });
+    }
+
+    // Resolution marker for DONE column.
+    if (sourceCol === "done") {
+      const marker = document.createElement("span");
+      if (r.resolution === "recurring") {
+        // Recurring cycle completed today — open [ ] with last: bumped to today.
+        marker.innerHTML = pill("♻ Recurring", { bg: "rgba(37,99,235,0.15)", text: "#2563eb", border: "rgba(37,99,235,0.5)" });
+        applyStyles(marker, { display: "block", marginBottom: "6px" });
+        card.appendChild(marker);
+        // Muted hint showing next cycle interval.
+        const hint = document.createElement("div");
+        applyStyles(hint, { fontSize: "10px", color: "#9ca3af", marginBottom: "4px" });
+        hint.textContent = "recurring — next cycle in " + r.recurs;
+        card.appendChild(hint);
+      } else {
+        const isDone = r.resolution === "done";
+        marker.innerHTML = isDone
+          ? pill("✓ Done", { bg: "rgba(22,163,74,0.15)", text: "#16a34a", border: "rgba(22,163,74,0.5)" })
+          : pill("✕ Won't Fix", { bg: "rgba(107,114,128,0.12)", text: "#6b7280", border: "rgba(107,114,128,0.4)" });
+        applyStyles(marker, { display: "block", marginBottom: "6px" });
+        card.appendChild(marker);
+      }
+    }
+
+    const titleEl = document.createElement("div");
+    applyStyles(titleEl, {
+      fontSize: "13px",
+      fontWeight: "500",
+      marginBottom: "6px",
+      lineHeight: "1.4",
+      wordBreak: "break-word",
+    });
+    titleEl.textContent = r.title;
+    card.appendChild(titleEl);
+
+    const metaRow = document.createElement("div");
+    applyStyles(metaRow, { display: "flex", flexWrap: "wrap", alignItems: "center", gap: "4px", marginBottom: sourceCol !== "done" ? "8px" : "0" });
+    let metaHtml = pill(displayDomain, dc);
+    if (prioLabel) metaHtml += pill(prioLabel, pc);
+    metaHtml += dueBadge(r);
+    if (r.blocked) metaHtml += blockedBadge(r);
+    metaRow.innerHTML = metaHtml;
+    card.appendChild(metaRow);
+
+    // Select fallback for TODO / IN PROGRESS cards.
+    if (sourceCol !== "done") {
+      const ctrlRow = document.createElement("div");
+      applyStyles(ctrlRow, { display: "flex", flexWrap: "wrap", alignItems: "center", gap: "5px", marginTop: "2px" });
+
+      const statusLabel = document.createElement("span");
+      applyStyles(statusLabel, { fontSize: "11px", color: "#9ca3af", whiteSpace: "nowrap" });
+      statusLabel.textContent = "Status ▸";
+      ctrlRow.appendChild(statusLabel);
+
+      const statusSelect = document.createElement("select");
+      applyStyles(statusSelect, {
+        fontSize: "11px",
+        padding: "1px 4px",
+        borderRadius: "4px",
+        border: "1px solid rgba(107,114,128,0.4)",
+        background: "var(--background-primary,#fff)",
+        color: "var(--text-normal,#374151)",
+        cursor: "pointer",
+      });
+      const statusOptions = [
+        { value: "", label: "—" },
+        { value: "todo", label: "To do" },
+        { value: "in-progress", label: "In progress" },
+        { value: "done", label: "Done" },
+        { value: "wont-fix", label: "Won't fix" },
+      ];
+      for (const opt of statusOptions) {
+        const o = document.createElement("option");
+        o.value = opt.value;
+        o.textContent = opt.label;
+        const curVal = sourceCol === "inprogress" ? "in-progress" : "";
+        if (opt.value === curVal) o.selected = true;
+        statusSelect.appendChild(o);
+      }
+      statusSelect.addEventListener("change", async (e) => {
+        const sel = e.target;
+        const chosen = sel.value;
+        if (chosen === "in-progress") {
+          await setStatusInProgress(r);
+        } else if (chosen === "todo") {
+          await clearStatus(r);
+        } else if (chosen === "done") {
+          const ok = await resolveTask(r, "done");
+          if (!ok) { sel.value = r.status || "todo"; return; }
+          if (r.recurs) new Notice("Recurring task: cycle completed — moved to DONE for today");
+          rebuildView();
+          return;
+        } else if (chosen === "wont-fix") {
+          const ok = await resolveTask(r, "wontfix");
+          if (!ok) { sel.value = r.status || "todo"; return; }
+          rebuildView();
+          return;
+        }
+        rebuildView();
+      });
+      ctrlRow.appendChild(statusSelect);
+      card.appendChild(ctrlRow);
+    }
+
+    return card;
+  }
+
+  // Build a droppable column element.
+  function buildStatusColEl(colId, label, color, cards, placeholder) {
+    const col = document.createElement("div");
+    applyStyles(col, {
+      minWidth: "220px",
+      maxWidth: "340px",
+      flex: "1 1 220px",
+      background: "rgba(107,114,128,0.04)",
+      border: "1px solid rgba(107,114,128,0.15)",
+      borderRadius: "10px",
+      padding: "10px 10px 4px",
+      display: "flex",
+      flexDirection: "column",
+      transition: "background 0.15s",
+    });
+
+    const colHeader = document.createElement("div");
+    applyStyles(colHeader, {
+      display: "flex",
+      alignItems: "center",
+      justifyContent: "space-between",
+      marginBottom: "10px",
+      paddingBottom: "6px",
+      borderBottom: `2px solid ${color.border}`,
+    });
+    const colTitle = document.createElement("span");
+    applyStyles(colTitle, {
+      fontSize: "12px",
+      fontWeight: "700",
+      color: color.text,
+      textTransform: "uppercase",
+      letterSpacing: ".04em",
+    });
+    colTitle.textContent = label;
+    colHeader.appendChild(colTitle);
+
+    const colBadge = document.createElement("span");
+    applyStyles(colBadge, {
+      display: "inline-flex",
+      alignItems: "center",
+      justifyContent: "center",
+      minWidth: "20px",
+      height: "20px",
+      borderRadius: "9999px",
+      background: color.bg,
+      color: color.text,
+      fontSize: "11px",
+      fontWeight: "700",
+      border: `1px solid ${color.border}`,
+      padding: "0 4px",
+    });
+    colBadge.textContent = String(cards.length);
+    colHeader.appendChild(colBadge);
+    col.appendChild(colHeader);
+
+    if (cards.length === 0) {
+      const empty = document.createElement("div");
+      applyStyles(empty, { fontSize: "12px", color: "#9ca3af", fontStyle: "italic", padding: "8px 4px" });
+      empty.textContent = placeholder;
+      col.appendChild(empty);
+    } else {
+      for (const cardEl of cards) col.appendChild(cardEl);
+    }
+
+    // Drag-and-drop target (not for DONE column).
+    if (colId !== "done") {
+      col.addEventListener("dragover", (e) => {
+        if (!_dragPayload) return;
+        e.preventDefault();
+        if (e.dataTransfer) e.dataTransfer.dropEffect = "move";
+        col.style.background = "rgba(37,99,235,0.07)";
+        col.style.borderColor = "rgba(37,99,235,0.4)";
+      });
+      col.addEventListener("dragleave", () => {
+        col.style.background = "rgba(107,114,128,0.04)";
+        col.style.borderColor = "rgba(107,114,128,0.15)";
+      });
+      col.addEventListener("drop", async (e) => {
+        e.preventDefault();
+        col.style.background = "rgba(107,114,128,0.04)";
+        col.style.borderColor = "rgba(107,114,128,0.15)";
+        if (!_dragPayload) return;
+        const { r, sourceCol } = _dragPayload;
+        _dragPayload = null;
+        if (sourceCol === colId) return;
+        if (colId === "inprogress") {
+          await setStatusInProgress(r);
+          rebuildView();
+        } else if (colId === "todo") {
+          await clearStatus(r);
+          rebuildView();
+        }
+      });
+    } else {
+      // DONE column accepts drops.
+      col.addEventListener("dragover", (e) => {
+        if (!_dragPayload) return;
+        e.preventDefault();
+        if (e.dataTransfer) e.dataTransfer.dropEffect = "move";
+        col.style.background = "rgba(22,163,74,0.07)";
+        col.style.borderColor = "rgba(22,163,74,0.4)";
+      });
+      col.addEventListener("dragleave", () => {
+        col.style.background = "rgba(107,114,128,0.04)";
+        col.style.borderColor = "rgba(107,114,128,0.15)";
+      });
+      col.addEventListener("drop", async (e) => {
+        e.preventDefault();
+        col.style.background = "rgba(107,114,128,0.04)";
+        col.style.borderColor = "rgba(107,114,128,0.15)";
+        if (!_dragPayload) return;
+        const { r } = _dragPayload;
+        _dragPayload = null;
+        // Clear status first, then resolve. Mirrors resolveTask semantics.
+        await rewriteLine(r.path, r.line, r.title, (line) => {
+          let l = unsetField(line, "status");
+          if (r.recurs) {
+            // Recurring + DONE: bump last:, keep [ ], no resolution/resolved tags
+            new Notice("Recurring task: cycle completed — moved to DONE for today");
+            return setField(l, "last", todayISO());
+          }
+          l = setCheckbox(l, "x");
+          l = setField(l, "resolution", "done");
+          l = setField(l, "resolved", todayISO());
+          return l;
+        });
+        rebuildView();
+      });
+    }
+
+    return col;
+  }
+
+  // Partition open records for the status board.
+  const inProgressRecords = records.filter(r => r.status === "in-progress");
+  const todoRecords = records.filter(r => {
+    const key = (r.title || "").toLowerCase().trim();
+    if (!scheduledTitles.has(key)) return false;
+    if (r.status === "in-progress") return false;
+    // Exclude recurring tasks already completed this cycle (last: set to today)
+    if (r.recurs && r.last === todayISOStr) return false;
+    return true;
+  });
+
+  const statusBoardSection = dv.el("div", "");
+  try {
+  const statusBoardHeader = document.createElement("div");
+  applyStyles(statusBoardHeader, {
+    fontSize: "15px",
+    fontWeight: "700",
+    marginBottom: "12px",
+    paddingBottom: "4px",
+    borderBottom: "2px solid rgba(107,114,128,0.2)",
+  });
+  statusBoardHeader.textContent = "Status Board";
+  statusBoardSection.appendChild(statusBoardHeader);
+
+  const statusBoardRow = document.createElement("div");
+  applyStyles(statusBoardRow, {
+    display: "flex",
+    flexWrap: "wrap",
+    gap: "12px",
+    alignItems: "flex-start",
+    marginBottom: "24px",
+  });
+
+  statusBoardRow.appendChild(buildStatusColEl(
+    "todo",
+    "TODO",
+    { bg: "rgba(37,99,235,0.12)", text: "#2563eb", border: "rgba(37,99,235,0.4)" },
+    todoRecords.map(r => buildStatusCardEl(r, "todo")),
+    "Nothing planned"
+  ));
+  statusBoardRow.appendChild(buildStatusColEl(
+    "inprogress",
+    "IN PROGRESS",
+    { bg: "rgba(245,158,11,0.12)", text: "#d97706", border: "rgba(245,158,11,0.4)" },
+    inProgressRecords.map(r => buildStatusCardEl(r, "inprogress")),
+    "Drag a card here"
+  ));
+  // Combine standard resolved-today records with recurring cycle completions.
+  // recurringCompletedToday: open [ ] tasks with recurs: and last: == today (cycle done).
+  const doneCards = [
+    ...resolvedToday.map(r => buildStatusCardEl(r, "done")),
+    ...recurringCompletedToday.map(r => buildStatusCardEl(r, "done")),
+  ];
+  statusBoardRow.appendChild(buildStatusColEl(
+    "done",
+    "DONE / WON'T FIX",
+    { bg: "rgba(22,163,74,0.12)", text: "#16a34a", border: "rgba(22,163,74,0.4)" },
+    doneCards,
+    "Nothing resolved today"
+  ));
+
+  statusBoardSection.appendChild(statusBoardRow);
+  } catch (sbErr) {
+    // Status Board render error must not crash the rest of the dashboard.
+    const sbErrEl = document.createElement("div");
+    applyStyles(sbErrEl, { fontSize: "12px", color: "#9ca3af", fontStyle: "italic", marginBottom: "24px" });
+    sbErrEl.textContent = "Status Board unavailable: " + sbErr.message;
+    statusBoardSection.appendChild(sbErrEl);
   }
 
   // ─── Section 8a: Quick Capture form ─────────────────────────────────────
@@ -907,26 +1344,33 @@ try {
 
   async function resolveTask(r, resolution) {
     const label = resolution === "done" ? "Done" : "Won't Fix";
-    if (!confirm(`Mark "${r.title}" as ${label}?`)) return;
+    if (!confirm(`Mark "${r.title}" as ${label}?`)) return false;
 
     await rewriteLine(r.path, r.line, r.title, (line) => {
+      let l = unsetField(line, "status");
       if (resolution === "done" && r.recurs) {
         // Recurring + DONE: bump last:, keep [ ], no resolution/resolved tags
-        return setField(line, "last", todayISO());
+        return setField(l, "last", todayISO());
       } else if (resolution === "done") {
         // Non-recurring DONE
-        let l = setCheckbox(line, "x");
+        l = setCheckbox(l, "x");
         l = setField(l, "resolution", "done");
         l = setField(l, "resolved", todayISO());
         return l;
       } else {
         // WON'T FIX (recurring or not)
-        let l = setCheckbox(line, "-");
+        l = setCheckbox(l, "-");
         l = setField(l, "resolution", "wontfix");
         l = setField(l, "resolved", todayISO());
         return l;
       }
     });
+    return true;
+  }
+
+  async function toggleBlocked(r) {
+    await rewriteLine(r.path, r.line, r.title, (line) =>
+      r.blocked ? unsetField(line, "blocked") : setField(line, "blocked", "true"));
   }
 
   // ─── Section 10: Shared button/control style helpers ─────────────────────
@@ -1024,6 +1468,7 @@ try {
       metaRow.innerHTML += pill("📅 " + _sched,
         { bg: "rgba(37,99,235,0.15)", text: "#2563eb", border: "rgba(37,99,235,0.5)" });
     }
+    metaRow.innerHTML += blockedBadge(r);
     card.appendChild(metaRow);
 
     // Controls row: Move ▸ select + Done button + Won't Fix button
@@ -1080,6 +1525,13 @@ try {
       () => resolveTask(r, "wontfix")
     );
     ctrlRow.appendChild(wontBtn);
+
+    const blockBtn = makeBtn(
+      r.blocked ? "🚫 Unblock" : "🚫 Block",
+      "rgba(220,38,38,0.1)", "#dc2626", "rgba(220,38,38,0.5)",
+      () => toggleBlocked(r)
+    );
+    ctrlRow.appendChild(blockBtn);
 
     card.appendChild(ctrlRow);
     return card;
@@ -1234,7 +1686,15 @@ try {
     // ── Task title cell ──
     const titleCel = document.createElement("td");
     applyStyles(titleCel, { padding: "4px 8px", fontSize: "13px" });
-    titleCel.textContent = r.title;
+    const titleText = document.createElement("span");
+    titleText.textContent = r.title;
+    titleCel.appendChild(titleText);
+    if (r.blocked) {
+      const blockedSpan = document.createElement("span");
+      blockedSpan.style.marginLeft = "6px";
+      blockedSpan.innerHTML = blockedBadge(r);
+      titleCel.appendChild(blockedSpan);
+    }
     tr.appendChild(titleCel);
 
     // ── Project cell (read-only pill) ──
@@ -1358,6 +1818,19 @@ try {
     );
     wontBtn.title = "Won't Fix";
     resolveCel.appendChild(wontBtn);
+
+    const blockSpacer = document.createElement("span");
+    blockSpacer.style.display = "inline-block";
+    blockSpacer.style.width = "4px";
+    resolveCel.appendChild(blockSpacer);
+
+    const blockToggleBtn = makeBtn(
+      "🚫",
+      "rgba(220,38,38,0.1)", "#dc2626", "rgba(220,38,38,0.5)",
+      () => toggleBlocked(r)
+    );
+    blockToggleBtn.title = r.blocked ? "Unblock" : "Mark Blocked";
+    resolveCel.appendChild(blockToggleBtn);
 
     tr.appendChild(resolveCel);
 
