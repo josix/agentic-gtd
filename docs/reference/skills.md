@@ -10,7 +10,7 @@ Skills are domain expertise modules read by Claude when executing commands. They
 
 **Location:** [`../../skills/gtd-prioritization/SKILL.md`](../../skills/gtd-prioritization/SKILL.md)
 
-The `gtd-prioritization` skill defines how tasks are parsed, ranked, and filtered for all planning commands. It owns the five-key tiebreak chain (prio rank → due date → effort → domain order → alphabetical), the energy-filter rules that modify the candidate list in `/plan-day`, the greedy time-fill algorithm, the recurring-task effective-due computation, and the weekend domain-reweighting logic.
+The `gtd-prioritization` skill defines how tasks are parsed, ranked, and filtered for all planning commands. It owns the six-key tiebreak chain (prio rank → manual order → due date → effort → domain order → alphabetical), the energy-filter rules that modify the candidate list in `/plan-day`, the greedy time-fill algorithm, the recurring-task effective-due computation, and the weekend domain-reweighting logic.
 
 This skill is read whenever `/plan-day`, `/plan-week`, or `/plan-weekend` is invoked.
 

@@ -26,7 +26,7 @@ A typical GTD week with `agentic-gtd` looks like this:
 
 ## Related
 
-- [Five Domains](../concepts/five-domains.md) — the Organize layer
+- [Domains](../concepts/five-domains.md) — the Organize layer
 - [Capturing Tasks](../guides/capturing-tasks.md) — the Capture and Clarify workflow
 - [Using /plan-weekend](../guides/using-plan-weekend.md) — the Reflect workflow
 - [Using /plan-day](../guides/using-plan-day.md) — the Engage workflow

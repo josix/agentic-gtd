@@ -1,6 +1,6 @@
 # agentic-gtd
 
-A Claude Code plugin that ingests tasks from local markdown files across five domains, produces ranked daily and weekend plans using a fixed GTD priority ladder, and one-way syncs tasks into a private GitHub Project.
+A Claude Code plugin that ingests tasks from local markdown files across configurable domains (five built-in, extensible via `/add-domain`), produces ranked daily and weekend plans using a fixed GTD priority ladder, and one-way syncs tasks into a private GitHub Project.
 
 ---
 
@@ -16,7 +16,7 @@ A Claude Code plugin that ingests tasks from local markdown files across five do
 
 ---
 
-## The five domains
+## The built-in domains
 
 | Domain | File | What belongs here |
 |--------|------|-------------------|
@@ -28,12 +28,15 @@ A Claude Code plugin that ingests tasks from local markdown files across five do
 
 `tasks/inbox.md` is a raw-capture inbox that is **never** read by planning or sync commands.
 
+Domains are an extensible registry in `tasks/domains.md`; `/add-domain` registers new ones (creates the task file, ranking order, color, sync flag).
+
 ---
 
 ## Commands
 
 | Command | Purpose | Details |
 |---------|---------|---------|
+| `/add-domain` | Register a new domain (creates task file + registry row) | [Commands](docs/reference/commands.md) |
 | `/add-task` | Append a new well-formed task to a domain file | [Capturing Tasks](docs/guides/capturing-tasks.md) |
 | `/clear-tasks` | Mark completed or abandoned tasks as resolved | [Commands](docs/reference/commands.md) |
 | `/layout` | Render a structured view of all tasks across domains | [Commands](docs/reference/commands.md) |
@@ -63,7 +66,7 @@ See [Installation](docs/getting-started/installation.md) for full setup instruct
 - [Quick Start](docs/getting-started/quick-start.md) — add a task and build your first plan in 5 minutes
 
 ### Concepts
-- [Five Domains](docs/concepts/five-domains.md) — how tasks are partitioned by life area
+- [Domains](docs/concepts/five-domains.md) — how tasks are partitioned by life area
 - [Task Line Format](docs/concepts/task-line-format.md) — full tag reference
 - [Priority Ladder](docs/concepts/priority-ladder.md) — the seven-tier ranking system
 - [Ranking](docs/concepts/ranking.md) — tiebreak chain and daily vs weekend differences
@@ -78,7 +81,7 @@ See [Installation](docs/getting-started/installation.md) for full setup instruct
 - [Obsidian Dashboard](docs/guides/obsidian-dashboard.md) — interactive board, inline editing, MCP
 
 ### Reference
-- [Commands](docs/reference/commands.md) — all nine commands at a glance
+- [Commands](docs/reference/commands.md) — all ten commands at a glance
 - [Skills](docs/reference/skills.md) — the two plugin skills (gtd-prioritization, github-sync)
 - [Triage Agent](docs/reference/triage-agent.md) — Triage agent specification
 - [FAQ](docs/reference/faq.md) — missing tags and common questions
