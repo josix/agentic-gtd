@@ -292,4 +292,22 @@ if (!pass7e) {
   process.exitCode = 1;
 }
 
+// ─── Test 8: week-plan label shows Monday of the plan week ───────────────────
+console.log("\n=== Test 8: week-plan label — startOf('week') snaps to Monday ===");
+
+// Friday 2026-06-12 → Monday 2026-06-08
+const fridayLabel = "Week of " + DateTime.fromISO("2026-06-12").startOf("week").toFormat("MMM dd");
+const pass8a = fridayLabel === "Week of Jun 08";
+console.log("  Friday 2026-06-12 → label:", fridayLabel, pass8a ? "PASS" : "FAIL");
+
+// Sunday 2026-06-14 → Monday 2026-06-08 (snaps BACK to that week's Monday, not forward)
+const sundayMonday = DateTime.fromISO("2026-06-14").startOf("week").toFormat("MMM dd");
+const pass8b = sundayMonday === "Jun 08";
+console.log("  Sunday 2026-06-14 → Monday:", sundayMonday, pass8b ? "PASS" : "FAIL");
+
+if (!pass8a || !pass8b) {
+  console.error("ASSERTION FAILED in Test 8");
+  process.exitCode = 1;
+}
+
 console.log("\n=== Test harness v2 complete ===");
