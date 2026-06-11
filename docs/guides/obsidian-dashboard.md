@@ -12,8 +12,8 @@ The dashboard (`tasks/templates/Dashboard.md`) is a DataviewJS block that render
 
 - A **Summary bar** with stat pills: total open, overdue, due this week, per-domain counts
 - A **Status Board** with three columns — TODO (auto-populated from today's plan), IN PROGRESS (drag or select), DONE / WON'T FIX (today's resolutions)
-- A **Board** grouped by priority tier, each card with Move reprioritize, Done, Won't Fix, Block/Unblock controls, and drag-to-reorder within the same priority column
-- A **Table** grouped by domain (collapsible), each row with inline priority, due, effort, and context editors plus resolve, Block/Unblock, and drag-to-reorder within the same domain and priority run
+- A **Board** grouped by priority tier, each column's cards clustered under small project sub-headers (groups ordered by best-ranked task in that project; a trailing "(no project)" group collects unaffiliated cards), each card with Move reprioritize, Done, Won't Fix, Block/Unblock controls, and drag-to-reorder within the same priority column
+- A **Table** grouped by domain (collapsible), each domain's rows further clustered under project sub-header rows (same suppression rule as the Board), each row with inline priority, due, effort, and context editors plus resolve, Block/Unblock, and drag-to-reorder within the same domain and priority run
 - A **Quick capture** form for raw inbox entries
 - An **Inbox needs triage** section listing all open inbox items
 
@@ -75,6 +75,8 @@ The **Status Board** sits below the Plan panels and above Quick capture. It has 
 - **IN PROGRESS** — open tasks with `status:in-progress`. Drag a card from TODO here, or use the "Status ▸" select on any card.
 - **DONE / WON'T FIX** — tasks resolved today (checkbox `[x]` or `[-]` with `resolved:<today>`) plus recurring tasks whose cycle was completed today. This column is read-only; cards show a ✓ Done, ✕ Won't Fix, or ♻ Recurring marker. The column clears at midnight rollover.
 
+Within each column, cards are clustered under small project sub-headers (same styling and suppression rule as the Board's priority columns). Sub-headers are display-only; they do not affect drag-and-drop behaviour because drop handlers are attached at the column level.
+
 **Drag-and-drop behaviour:**
 - Drag a TODO card → drop on IN PROGRESS: sets `status:in-progress` in the source line; checkbox stays `[ ]`.
 - Drag an IN PROGRESS card → drop on TODO: clears `status:` from the source line.
@@ -90,13 +92,14 @@ Board cards and Table rows can be reordered by dragging, providing a within-rank
 
 **Board (by Priority column):**
 - Each card is draggable. Grab a card and drop it above or below another card in the same column to change its position.
-- On drop, the dashboard writes a dense `order:N` tag (1, 2, 3, …) to every task in that priority column in the new visual sequence.
+- On drop, the dashboard writes a dense `order:N` tag (1, 2, 3, …) to every task in that priority column in the new visual sequence — "visual sequence" here means the clustered order (project groups in appearance order, no-project group trailing). Cross-project drops are accepted but snap back into the card's own project group when the dashboard rebuilds; clustering wins for display while manual `order:` persists within a project group.
+- Sub-headers are display-only visual separators — no tags are written for them.
 - Cross-column drops are no-ops — dragging a card to a different priority column is rejected. Use the "Move ▸" select to change priority rank.
 
 **Table (by Domain group):**
 - Each row has a drag handle (⠿) in the first column. Drag a row and drop it above or below another row to reorder.
 - Drop is only valid within the same domain group AND among rows with the same priority rank. Cross-domain or cross-rank drops are no-ops.
-- On a valid drop, `order:N` is written densely to all tasks in that same-rank run within the domain.
+- On a valid drop, `order:N` is written densely to all tasks in that same-rank run within the domain, following the clustered visual top-to-bottom order (project groups in first-appearance order, no-project trailing) — same snap-back semantics as the Board.
 
 **Semantics:**
 - `order:N` is a within-rank tiebreak: it never overrides the prio rank ladder. A rank-1 task without `order:` always sorts before any rank-3 task regardless of its `order:` value.

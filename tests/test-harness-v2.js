@@ -207,4 +207,89 @@ if (!pass6) {
   process.exitCode = 1;
 }
 
+// ─── Test 7: clusterByProject ─────────────────────────────────────────────
+console.log("\n=== Test 7: clusterByProject — project sub-header clustering ===");
+
+// Hand-copied from Dashboard.md (same pattern as compareTasks above)
+function clusterByProject(records) {
+  const order = [];
+  const buckets = new Map();
+  const NOPROJ = Symbol("noproject");
+  for (const r of records) {
+    const key = r.project ? r.project : NOPROJ;
+    if (!buckets.has(key)) { buckets.set(key, []); if (key !== NOPROJ) order.push(key); }
+    buckets.get(key).push(r);
+  }
+  const flat = [];
+  const groups = [];
+  for (const key of order) {
+    const arr = buckets.get(key);
+    groups.push({ project: key, start: flat.length, count: arr.length });
+    for (const r of arr) flat.push(r);
+  }
+  if (buckets.has(NOPROJ)) {
+    const arr = buckets.get(NOPROJ);
+    groups.push({ project: null, start: flat.length, count: arr.length });
+    for (const r of arr) flat.push(r);
+  }
+  return { flat, groups };
+}
+
+// 7a: group order by first appearance; 7b: within-group order preserved
+// Input pre-sorted: [A(projX), B(projY), C(projX)] → flat = [A, C, B]
+const rA = { title: "A", project: "projX" };
+const rB = { title: "B", project: "projY" };
+const rC = { title: "C", project: "projX" };
+const res7a = clusterByProject([rA, rB, rC]);
+const pass7a = res7a.flat[0] === rA && res7a.flat[1] === rC && res7a.flat[2] === rB;
+const pass7b = res7a.flat[0] === rA && res7a.flat[1] === rC; // A before C within projX
+console.log("  7a group order (projX first, then projY):", pass7a ? "PASS" : "FAIL", res7a.flat.map(r => r.title));
+console.log("  7b within-group order (A before C):", pass7b ? "PASS" : "FAIL");
+if (!pass7a || !pass7b) {
+  console.error("ASSERTION FAILED in Test 7a/7b");
+  process.exitCode = 1;
+}
+
+// 7c: trailing no-project bucket
+// Input: [A(projX), N(none), B(projX)] → flat = [A, B, N]; last group has project === null
+const rN = { title: "N", project: null };
+const rBx = { title: "Bx", project: "projX" };
+const res7c = clusterByProject([rA, rN, rBx]);
+const pass7c = res7c.flat[0] === rA && res7c.flat[1] === rBx && res7c.flat[2] === rN;
+const pass7cNull = res7c.groups[res7c.groups.length - 1].project === null;
+console.log("  7c trailing no-project bucket:", pass7c ? "PASS" : "FAIL", res7c.flat.map(r => r.title));
+console.log("  7c last group project === null:", pass7cNull ? "PASS" : "FAIL");
+if (!pass7c || !pass7cNull) {
+  console.error("ASSERTION FAILED in Test 7c");
+  process.exitCode = 1;
+}
+
+// 7d: boundaries — sum(count) === flat.length and each start === prev.start + prev.count
+const res7d = clusterByProject([rA, rB, rC, rN]);
+const sumCount = res7d.groups.reduce((acc, g) => acc + g.count, 0);
+const pass7dSum = sumCount === res7d.flat.length;
+let pass7dBounds = true;
+for (let i = 1; i < res7d.groups.length; i++) {
+  if (res7d.groups[i].start !== res7d.groups[i-1].start + res7d.groups[i-1].count) {
+    pass7dBounds = false;
+  }
+}
+console.log("  7d sum(count) === flat.length:", pass7dSum ? "PASS" : "FAIL", sumCount, "===", res7d.flat.length);
+console.log("  7d start boundaries contiguous:", pass7dBounds ? "PASS" : "FAIL");
+if (!pass7dSum || !pass7dBounds) {
+  console.error("ASSERTION FAILED in Test 7d");
+  process.exitCode = 1;
+}
+
+// 7e: idempotency — clustering an already-clustered flat array produces the same flat array
+const input7e = [rA, rB, rC, rN];
+const first = clusterByProject(input7e).flat;
+const second = clusterByProject(first).flat;
+const pass7e = first.length === second.length && first.every((r, i) => r === second[i]);
+console.log("  7e idempotency:", pass7e ? "PASS" : "FAIL");
+if (!pass7e) {
+  console.error("ASSERTION FAILED in Test 7e");
+  process.exitCode = 1;
+}
+
 console.log("\n=== Test harness v2 complete ===");

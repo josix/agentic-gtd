@@ -1,12 +1,12 @@
 # Agentic GTD Dashboard
-
+%% 
 > **INTERACTIVE DASHBOARD** — Renders a GitHub-Projects-style Board + Table dashboard with in-place editing.
 > Open tasks are sourced live from `tasks/*.md` files; those files are the single source of truth.
 > **Edit capabilities**: (1) Resolve tasks as Done or Won't Fix via buttons on cards and rows; (2) Edit priority, due date, effort, and context inline in table rows; (3) Reprioritize via "Move ▸" selector on board cards; (4) Block/Unblock tasks; (5) Drag-and-drop or select tasks across Status Board columns (TODO → IN PROGRESS → DONE). All writes go directly to the source `.md` file. Markdown stays the source of truth; resolve via buttons — never hard-delete a line.
 >
 > **PREREQUISITE**: Dataview's **"Enable JavaScript Queries" (DataviewJS)** setting must be turned ON in Settings → Community plugins → Dataview for the controls to work.
 >
-> Layout: **Summary bar** (stat pills) → **Plan panels** (Today / This Week / Weekend, each showing its own latest plan note) → **Status Board** (TODO / IN PROGRESS / DONE columns, drag-and-drop) → **Quick capture** → **Inbox** → **Board** (columns by priority tier, with Move + Resolve controls) → **Table** (grouped by domain, collapsible, with inline field editors + Resolve controls).
+> Layout: **Summary bar** (stat pills) → **Plan panels** (Today / This Week / Weekend, each showing its own latest plan note) → **Status Board** (TODO / IN PROGRESS / DONE columns, drag-and-drop) → **Quick capture** → **Inbox** → **Board** (columns by priority tier, with Move + Resolve controls) → **Table** (grouped by domain, collapsible, with inline field editors + Resolve controls). %%
 
 ```dataviewjs
 // ─── Section 1: Configuration ──────────────────────────────────────────────
@@ -860,7 +860,9 @@ try {
   }
 
   // Build a droppable column element.
-  function buildStatusColEl(colId, label, color, cards, placeholder) {
+  // `records` is an array of task records (not pre-built card elements).
+  // Cards are built internally so project sub-headers can be interleaved.
+  function buildStatusColEl(colId, label, color, records, placeholder) {
     const col = document.createElement("div");
     applyStyles(col, {
       minWidth: "220px",
@@ -910,17 +912,41 @@ try {
       border: `1px solid ${color.border}`,
       padding: "0 4px",
     });
-    colBadge.textContent = String(cards.length);
+    colBadge.textContent = String(records.length);
     colHeader.appendChild(colBadge);
     col.appendChild(colHeader);
 
-    if (cards.length === 0) {
+    if (records.length === 0) {
       const empty = document.createElement("div");
       applyStyles(empty, { fontSize: "12px", color: "#9ca3af", fontStyle: "italic", padding: "8px 4px" });
       empty.textContent = placeholder;
       col.appendChild(empty);
     } else {
-      for (const cardEl of cards) col.appendChild(cardEl);
+      // Cluster records by project; sub-header divs are flat siblings of cards
+      // so drop handlers (attached at column level) are unaffected.
+      const { flat: statusFlat, groups: statusGroups } = clusterByProject(records);
+      const showStatusSubHdrs = !(statusGroups.length === 1 && statusGroups[0].project === null);
+      for (const grp of statusGroups) {
+        if (showStatusSubHdrs) {
+          const subHdr = document.createElement("div");
+          applyStyles(subHdr, {
+            fontSize: "11px",
+            fontWeight: "700",
+            textTransform: "uppercase",
+            letterSpacing: ".03em",
+            color: "#6b7280",
+            marginTop: "6px",
+            marginBottom: "4px",
+            paddingBottom: "3px",
+            borderBottom: "1px solid rgba(107,114,128,0.2)",
+          });
+          subHdr.textContent = grp.project ? grp.project : "(no project)";
+          col.appendChild(subHdr);
+        }
+        for (let i = grp.start; i < grp.start + grp.count; i++) {
+          col.appendChild(buildStatusCardEl(statusFlat[i], colId));
+        }
+      }
     }
 
     // Drag-and-drop target (not for DONE column).
@@ -1029,27 +1055,27 @@ try {
     "todo",
     "TODO",
     { bg: "rgba(37,99,235,0.12)", text: "#2563eb", border: "rgba(37,99,235,0.4)" },
-    todoRecords.map(r => buildStatusCardEl(r, "todo")),
+    todoRecords,
     "Nothing planned"
   ));
   statusBoardRow.appendChild(buildStatusColEl(
     "inprogress",
     "IN PROGRESS",
     { bg: "rgba(245,158,11,0.12)", text: "#d97706", border: "rgba(245,158,11,0.4)" },
-    inProgressRecords.map(r => buildStatusCardEl(r, "inprogress")),
+    inProgressRecords,
     "Drag a card here"
   ));
   // Combine standard resolved-today records with recurring cycle completions.
   // recurringCompletedToday: open [ ] tasks with recurs: and last: == today (cycle done).
-  const doneCards = [
-    ...resolvedToday.map(r => buildStatusCardEl(r, "done")),
-    ...recurringCompletedToday.map(r => buildStatusCardEl(r, "done")),
+  const doneRecords = [
+    ...resolvedToday,
+    ...recurringCompletedToday,
   ];
   statusBoardRow.appendChild(buildStatusColEl(
     "done",
     "DONE / WON'T FIX",
     { bg: "rgba(22,163,74,0.12)", text: "#16a34a", border: "rgba(22,163,74,0.4)" },
-    doneCards,
+    doneRecords,
     "Nothing resolved today"
   ));
 
@@ -1434,6 +1460,36 @@ try {
     return btn;
   }
 
+  // ─── clusterByProject ────────────────────────────────────────────────────
+  // Input: records already in comparator order (a column's array).
+  // Output: { flat: [...records in clustered order], groups: [{ project, start, count }] }
+  // Group key: r.project || null. Group order = first appearance while scanning
+  // (comparator order => best-ranked member positions the group). Within-group
+  // order preserved. No-project records collect into a single TRAILING bucket.
+  function clusterByProject(records) {
+    const order = [];
+    const buckets = new Map();
+    const NOPROJ = Symbol("noproject");
+    for (const r of records) {
+      const key = r.project ? r.project : NOPROJ;
+      if (!buckets.has(key)) { buckets.set(key, []); if (key !== NOPROJ) order.push(key); }
+      buckets.get(key).push(r);
+    }
+    const flat = [];
+    const groups = [];
+    for (const key of order) {
+      const arr = buckets.get(key);
+      groups.push({ project: key, start: flat.length, count: arr.length });
+      for (const r of arr) flat.push(r);
+    }
+    if (buckets.has(NOPROJ)) {
+      const arr = buckets.get(NOPROJ);
+      groups.push({ project: null, start: flat.length, count: arr.length });
+      for (const r of arr) flat.push(r);
+    }
+    return { flat, groups };
+  }
+
   // ─── Section 11: Board — grouped by priority tier ────────────────────────
   // One column per priority that has ≥1 task, in rank order, with an
   // "Unprioritized" trailing column for rank-99 tasks.
@@ -1536,7 +1592,8 @@ try {
       pill(displayDomain, dc) +
       dueBadge(r) +
       `<span style="font-size:11px;color:#9ca3af;padding:1px 5px;">${esc(effortLabel)}</span>` +
-      (r.context ? `<span style="font-size:10px;color:#9ca3af;margin-left:4px;">${esc(r.context)}</span>` : "");
+      (r.context ? `<span style="font-size:10px;color:#9ca3af;margin-left:4px;">${esc(r.context)}</span>` : "") +
+      (r.project ? pill(r.project, { bg: "rgba(107,114,128,0.1)", text: "#6b7280", border: "rgba(107,114,128,0.3)" }) : "");
     const _sched = scheduledTitles.get((r.title || "").toLowerCase().trim());
     if (_sched) {
       metaRow.innerHTML += pill("📅 " + _sched,
@@ -1695,8 +1752,30 @@ try {
 
     col.appendChild(colHeader);
 
-    for (const r of tasks) {
-      col.appendChild(buildCardEl(r));
+    // Cluster cards by project; sub-headers are flat siblings of cards (no wrapper divs)
+    // so the drop handler's col.children filter on dataset.prio still works correctly.
+    const { flat, groups } = clusterByProject(tasks);
+    const showSubHeaders = !(groups.length === 1 && groups[0].project === null);
+    for (const grp of groups) {
+      if (showSubHeaders) {
+        const subHdr = document.createElement("div");
+        applyStyles(subHdr, {
+          fontSize: "11px",
+          fontWeight: "700",
+          textTransform: "uppercase",
+          letterSpacing: ".03em",
+          color: "#6b7280",
+          marginTop: "6px",
+          marginBottom: "4px",
+          paddingBottom: "3px",
+          borderBottom: "1px solid rgba(107,114,128,0.2)",
+        });
+        subHdr.textContent = grp.project ? grp.project : "(no project)";
+        col.appendChild(subHdr);
+      }
+      for (let i = grp.start; i < grp.start + grp.count; i++) {
+        col.appendChild(buildCardEl(flat[i]));
+      }
     }
 
     // Column-level dragover/dragleave/drop for Board reorder.
@@ -1738,8 +1817,11 @@ try {
       // Clear all dropPosition markers
       for (const el of allCardEls) { delete el.dataset.dropPosition; el.style.borderTop = ""; el.style.borderBottom = ""; }
 
-      // Reconstruct new sequence of records for this column
-      const colRecords = tasks.slice(); // tasks is the sorted array for this column
+      // dropIdx is a position in the rendered (clustered) card list, so colRecords must
+      // be the same flat clustered array; cross-project drops renumber but snap back into
+      // their own project group on rebuild (clustering wins for display; order persists
+      // within a group).
+      const colRecords = flat.slice(); // use the same clustered sequence as the DOM
       const srcIdx = colRecords.findIndex(r2 => r2.path === srcRecord.path && r2.line === srcRecord.line);
       if (srcIdx === -1) return;
       // Remove src from current position
@@ -2076,12 +2158,41 @@ try {
     thead.innerHTML = tableHeaderRowHtml;
     table.appendChild(thead);
 
+    // Cluster the domain's tasks by project; render sub-header rows interleaved
+    // with data rows so the visual order matches the clustered flat array.
+    const { flat: domainFlat, groups: domainGroups } = clusterByProject(domainTasks);
+    const showTableSubHdrs = !(domainGroups.length === 1 && domainGroups[0].project === null);
+    // colspan = 8: drag-handle + Priority + Task + Project + Due + Effort + Context + Actions
+    const TABLE_COLSPAN = 8;
+
     const tbody = document.createElement("tbody");
-    for (const r of domainTasks) {
-      tbody.appendChild(buildTableRowEl(r));
+    for (const grp of domainGroups) {
+      if (showTableSubHdrs) {
+        const subHdrTr = document.createElement("tr");
+        const subHdrTd = document.createElement("td");
+        subHdrTd.colSpan = TABLE_COLSPAN;
+        applyStyles(subHdrTd, {
+          fontSize: "11px",
+          fontWeight: "700",
+          textTransform: "uppercase",
+          letterSpacing: ".03em",
+          color: "#6b7280",
+          padding: "8px 8px 3px",
+          borderBottom: "1px solid rgba(107,114,128,0.2)",
+        });
+        subHdrTd.textContent = grp.project ? grp.project : "(no project)";
+        subHdrTr.appendChild(subHdrTd);
+        tbody.appendChild(subHdrTr);
+      }
+      for (let i = grp.start; i < grp.start + grp.count; i++) {
+        tbody.appendChild(buildTableRowEl(domainFlat[i]));
+      }
     }
 
-    // tbody drop handler: reorder within same domain AND same rank run
+    // tbody drop handler: reorder within same domain AND same rank run.
+    // Same-rank sequence is derived from domainFlat (clustered order) so that
+    // renumbered order:N values follow the visual top-to-bottom clustered order.
+    // Sub-header <tr>s have no dataset.rank so they are skipped by all rank-keyed filters.
     tbody.addEventListener("dragover", (e) => {
       if (!_tableReorderPayload) return;
       e.preventDefault();
@@ -2106,23 +2217,24 @@ try {
       }
       for (const el of allRowEls) { delete el.dataset.dropPosition; el.style.outline = ""; }
 
-      // Collect only same-rank records within this domain for renumbering
-      const sameRankRecords = domainTasks.filter(r => r.rank === srcRecord.rank);
-      // Cross-rank drop: reject (target row rank differs)
+      // Same-rank records in clustered visual order (sub-header rows skipped
+      // because they have no dataset.rank).
+      // domainFlat is the flat clustered order; filter to same rank preserves
+      // that visual top-to-bottom sequence across project groups.
+      const sameRankRecords = domainFlat.filter(r => r.rank === srcRecord.rank);
+      // Cross-rank drop: reject
       const allSameRankPaths = new Set(sameRankRecords.map(r2 => r2.path + ":" + r2.line));
       const srcKey = srcRecord.path + ":" + srcRecord.line;
       if (!allSameRankPaths.has(srcKey)) return;
 
       // Compute the insertion index within the same-rank run.
-      // The rows in tbody are all domainTasks (mixed ranks); we must remap
-      // the overall dropIdx to an index within the same-rank run.
+      // allRowEls now contains both data rows and sub-header rows.
+      // sameRankEls filters to data rows of the correct rank; sub-headers are skipped.
       const sameRankEls = allRowEls.filter(el =>
-        el.dataset.rank === String(srcRecord.rank));
-      const domainRowEls = allRowEls;
-      // Re-derive dropIdx within same-rank rows
+        el.dataset && el.dataset.rank === String(srcRecord.rank));
       let rankDropIdx = sameRankEls.length;
       for (let i = 0; i < sameRankEls.length; i++) {
-        const domainIdx = domainRowEls.indexOf(sameRankEls[i]);
+        const domainIdx = allRowEls.indexOf(sameRankEls[i]);
         if (domainIdx >= dropIdx) { rankDropIdx = i; break; }
       }
 
