@@ -32,6 +32,7 @@ Tags are **double-space-separated** from the description and from each other. Si
 | `resolved` | No | `YYYY-MM-DD` | Date resolution was applied; written by dashboard |
 | `blocked` | No | `true` (presence only) | Set/cleared by the dashboard Block toggle; omitted when unblocked |
 | `status` | No | `in-progress` | Set/cleared by the dashboard Status Board (drag or select); checkbox stays `[ ]` while in progress |
+| `order` | No | positive integer | Written by the dashboard drag-to-reorder; within-rank manual tiebreak used by plan commands; do not set manually |
 
 ## Examples
 

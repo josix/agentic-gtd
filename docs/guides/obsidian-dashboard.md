@@ -12,8 +12,8 @@ The dashboard (`tasks/templates/Dashboard.md`) is a DataviewJS block that render
 
 - A **Summary bar** with stat pills: total open, overdue, due this week, per-domain counts
 - A **Status Board** with three columns — TODO (auto-populated from today's plan), IN PROGRESS (drag or select), DONE / WON'T FIX (today's resolutions)
-- A **Board** grouped by priority tier, each card with Move reprioritize, Done, Won't Fix, and Block/Unblock controls
-- A **Table** grouped by domain (collapsible), each row with inline priority, due, effort, and context editors plus resolve and Block/Unblock buttons
+- A **Board** grouped by priority tier, each card with Move reprioritize, Done, Won't Fix, Block/Unblock controls, and drag-to-reorder within the same priority column
+- A **Table** grouped by domain (collapsible), each row with inline priority, due, effort, and context editors plus resolve, Block/Unblock, and drag-to-reorder within the same domain and priority run
 - A **Quick capture** form for raw inbox entries
 - An **Inbox needs triage** section listing all open inbox items
 
@@ -83,6 +83,26 @@ The **Status Board** sits below the Plan panels and above Quick capture. It has 
 **Select fallback:** each TODO and IN PROGRESS card has a compact "Status ▸" select with options: To do, In progress, Done, Won't fix. Done and Won't fix routes through the standard resolve handler (includes confirm dialog). Won't fix sets checkbox `[-]` and `resolution:wontfix`. For recurring tasks, selecting Done fires a "cycle completed" notice and shows the task in DONE for the rest of the day.
 
 The dashboard auto-rebuilds after every write so columns recompute from the source markdown immediately.
+
+### 6. Drag-to-Reorder (Manual Prioritization)
+
+Board cards and Table rows can be reordered by dragging, providing a within-rank manual tiebreak that persists to the source task files.
+
+**Board (by Priority column):**
+- Each card is draggable. Grab a card and drop it above or below another card in the same column to change its position.
+- On drop, the dashboard writes a dense `order:N` tag (1, 2, 3, …) to every task in that priority column in the new visual sequence.
+- Cross-column drops are no-ops — dragging a card to a different priority column is rejected. Use the "Move ▸" select to change priority rank.
+
+**Table (by Domain group):**
+- Each row has a drag handle (⠿) in the first column. Drag a row and drop it above or below another row to reorder.
+- Drop is only valid within the same domain group AND among rows with the same priority rank. Cross-domain or cross-rank drops are no-ops.
+- On a valid drop, `order:N` is written densely to all tasks in that same-rank run within the domain.
+
+**Semantics:**
+- `order:N` is a within-rank tiebreak: it never overrides the prio rank ladder. A rank-1 task without `order:` always sorts before any rank-3 task regardless of its `order:` value.
+- Tasks without an `order:` tag sort after all explicitly ordered tasks within the same rank (treated as Infinity in the comparator), then fall back to the normal due/effort/domain/title tiebreaks.
+- The plan commands (`/plan-day`, `/plan-week`, `/plan-weekend`) use `order:` as their second tiebreak criterion (after prio rank), so the manual order you set in the dashboard carries directly into generated plans.
+- `order:` is written by the dashboard only; do not set it manually.
 
 ## Capture to Triage Loop
 

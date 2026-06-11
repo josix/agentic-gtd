@@ -204,6 +204,8 @@ try {
     const impact  = extract(text, /\bimpact:(\S+)/);
     const blocked = /\bblocked:true\b/.test(text);
     const status  = extract(text, /\bstatus:(\S+)/);
+    const _orderRaw = extract(text, /\border:(\d+)\b/);
+    const order   = _orderRaw ? parseInt(_orderRaw, 10) : null;
 
     const title = text
       .replace(/\b\w+:\S+/g, "")
@@ -235,7 +237,7 @@ try {
     return {
       title, domain, prio, rank, effort, effortMin,
       due, effectiveDueISO, context, recurs, last, impact, blocked, status,
-      duEpoch, domainIdx, project,
+      duEpoch, domainIdx, project, order,
       // Source location for writes (t.line is 0-based line index in Dataview)
       path: t.path,
       line: t.line,
@@ -286,18 +288,28 @@ try {
   // ─── Section 5: Sort comparator (strict tiebreak per SKILL.md) ───────────
 
   function compareTasks(a, b) {
+    // Step 1: prio rank (strict, never overridden)
     if (a.rank !== b.rank) return a.rank - b.rank;
+    // Step 2: manual order ascending — tasks without order:N sort after ordered siblings
+    //         within the same rank; never crosses prio-rank boundaries.
+    const ao = (a.order == null) ? Infinity : a.order;
+    const bo = (b.order == null) ? Infinity : b.order;
+    if (ao !== bo) return ao - bo;
+    // Step 3: due-date proximity
     if (a.duEpoch !== b.duEpoch) {
       if (a.duEpoch === Infinity) return 1;
       if (b.duEpoch === Infinity) return -1;
       return a.duEpoch - b.duEpoch;
     }
+    // Step 4: effort ascending
     if (a.effortMin !== b.effortMin) {
       if (a.effortMin === Infinity) return 1;
       if (b.effortMin === Infinity) return -1;
       return a.effortMin - b.effortMin;
     }
+    // Step 5: domain order
     if (a.domainIdx !== b.domainIdx) return a.domainIdx - b.domainIdx;
+    // Step 6: alphabetical by title
     return a.title.toLowerCase().localeCompare(b.title.toLowerCase());
   }
 
@@ -1338,6 +1350,26 @@ try {
     }
   }
 
+  // ─── renumberGroup: dense order:N rewrite ───────────────────────────────
+  // Assigns order:1, 2, 3, … to every record in groupRecords (in the new
+  // visual sequence) by rewriting the order: token in each source line.
+  // Semantics:
+  //   • Rank-scoped: only records within the same prio rank are ever passed here.
+  //   • Dense: numbering starts at 1 with no gaps.
+  //   • Missing order (null) sorts as Infinity in compareTasks, i.e. after all
+  //     explicitly ordered siblings.
+  //   • Sequential writes (no Promise.all): concurrent app.vault.process calls
+  //     on the same file can race; we serialize to avoid corruption.
+  //   • One rebuildView() after the full loop.
+  async function renumberGroup(groupRecords) {
+    for (let i = 0; i < groupRecords.length; i++) {
+      const r = groupRecords[i];
+      await rewriteLine(r.path, r.line, r.title,
+        (line) => setField(line, "order", String(i + 1)));
+    }
+    rebuildView();
+  }
+
   // ─── Section 9: Resolve handler (Capability 1) ───────────────────────────
   // resolution: "done" | "wontfix"
   // Mirrors /clear-tasks semantics exactly.
@@ -1420,13 +1452,16 @@ try {
   const colHeaderColor = Object.assign({}, prioColors);
   colHeaderColor._unknown = prioColors._unknown;
 
+  // Module-scope drag payload for Board reorder (separate from Status Board _dragPayload).
+  let _reorderPayload = null;
+
   // Build a board card as a DOM element (needed for interactive controls).
   function buildCardEl(r) {
     const dc = domainColors[r.domain] || prioColors._unknown;
     const displayDomain = r.domain ? (r.domain.charAt(0).toUpperCase() + r.domain.slice(1)) : "—";
     const effortLabel = r.effort || "—";
 
-    // Card wrapper
+    // Card wrapper — draggable for within-column reorder
     const card = document.createElement("div");
     applyStyles(card, {
       background: "var(--background-primary,#fff)",
@@ -1435,6 +1470,45 @@ try {
       padding: "10px 12px",
       marginBottom: "8px",
       boxShadow: "0 1px 3px rgba(0,0,0,0.06)",
+      cursor: "grab",
+      position: "relative",
+    });
+    card.draggable = true;
+    card.dataset.prio = r.prio || "_unknown";
+
+    card.addEventListener("dragstart", (e) => {
+      _reorderPayload = { r };
+      card.style.opacity = "0.5";
+      if (e.dataTransfer) e.dataTransfer.effectAllowed = "move";
+    });
+    card.addEventListener("dragend", () => {
+      card.style.opacity = "1";
+      card.style.borderTop = "";
+      card.style.borderBottom = "";
+      _reorderPayload = null;
+    });
+    // Card-level dragover: show insertion indicator above/below this card
+    card.addEventListener("dragover", (e) => {
+      if (!_reorderPayload) return;
+      const src = _reorderPayload.r;
+      // Reject cross-column drags
+      const srcPrio = src.prio || "_unknown";
+      const tgtPrio = card.dataset.prio;
+      if (srcPrio !== tgtPrio) return;
+      e.preventDefault();
+      e.stopPropagation();
+      if (e.dataTransfer) e.dataTransfer.dropEffect = "move";
+      const rect = card.getBoundingClientRect();
+      const mid = rect.top + rect.height / 2;
+      const isBefore = e.clientY < mid;
+      card.style.borderTop = isBefore ? "2px solid rgba(37,99,235,0.7)" : "";
+      card.style.borderBottom = isBefore ? "" : "2px solid rgba(37,99,235,0.7)";
+      card.dataset.dropPosition = isBefore ? "before" : "after";
+    });
+    card.addEventListener("dragleave", () => {
+      card.style.borderTop = "";
+      card.style.borderBottom = "";
+      delete card.dataset.dropPosition;
     });
 
     // Title
@@ -1625,6 +1699,58 @@ try {
       col.appendChild(buildCardEl(r));
     }
 
+    // Column-level dragover/dragleave/drop for Board reorder.
+    // Drop is only valid within the same prio column.
+    col.addEventListener("dragover", (e) => {
+      if (!_reorderPayload) return;
+      const srcPrio = _reorderPayload.r.prio || "_unknown";
+      if (srcPrio !== key) return;  // cross-column: reject
+      e.preventDefault();
+      if (e.dataTransfer) e.dataTransfer.dropEffect = "move";
+      col.style.background = "rgba(37,99,235,0.04)";
+    });
+    col.addEventListener("dragleave", (e) => {
+      // Only reset if leaving the column (not entering a child card)
+      if (!col.contains(e.relatedTarget)) {
+        col.style.background = "rgba(107,114,128,0.04)";
+      }
+    });
+    col.addEventListener("drop", async (e) => {
+      e.preventDefault();
+      col.style.background = "rgba(107,114,128,0.04)";
+      if (!_reorderPayload) return;
+      const { r: srcRecord } = _reorderPayload;
+      _reorderPayload = null;
+
+      // Reject cross-column drops
+      if ((srcRecord.prio || "_unknown") !== key) return;
+
+      // Find which card the pointer was over when drop fired
+      // and compute the new sequence from the column's current card list.
+      const allCardEls = Array.from(col.children).filter(el => el.dataset && el.dataset.prio);
+      // Determine drop index based on dropPosition markers left by card dragover
+      let dropIdx = allCardEls.length;  // default: end of column
+      for (let i = 0; i < allCardEls.length; i++) {
+        const pos = allCardEls[i].dataset.dropPosition;
+        if (pos === "before") { dropIdx = i; break; }
+        if (pos === "after")  { dropIdx = i + 1; break; }
+      }
+      // Clear all dropPosition markers
+      for (const el of allCardEls) { delete el.dataset.dropPosition; el.style.borderTop = ""; el.style.borderBottom = ""; }
+
+      // Reconstruct new sequence of records for this column
+      const colRecords = tasks.slice(); // tasks is the sorted array for this column
+      const srcIdx = colRecords.findIndex(r2 => r2.path === srcRecord.path && r2.line === srcRecord.line);
+      if (srcIdx === -1) return;
+      // Remove src from current position
+      colRecords.splice(srcIdx, 1);
+      // Clamp dropIdx after removal
+      const insertAt = dropIdx > srcIdx ? dropIdx - 1 : dropIdx;
+      colRecords.splice(Math.min(insertAt, colRecords.length), 0, srcRecord);
+
+      await renumberGroup(colRecords);
+    });
+
     boardRow.appendChild(col);
   }
 
@@ -1646,12 +1772,61 @@ try {
   tableHeaderEl.textContent = "All tasks · grouped by Domain";
   tableSection.appendChild(tableHeaderEl);
 
+  // Module-scope drag payload for Table reorder.
+  let _tableReorderPayload = null;
+
   // Build a table row as a DOM element (needed for interactive editors).
   function buildTableRowEl(r) {
     const pc = prioColors[r.prio] || prioColors._unknown;
 
     const tr = document.createElement("tr");
     applyStyles(tr, { borderBottom: "1px solid rgba(107,114,128,0.12)" });
+
+    // ── Drag handle cell ──
+    const dragHandleCel = document.createElement("td");
+    applyStyles(dragHandleCel, {
+      padding: "4px 6px",
+      color: "#9ca3af",
+      fontSize: "12px",
+      cursor: "grab",
+      userSelect: "none",
+      whiteSpace: "nowrap",
+    });
+    dragHandleCel.textContent = "⠿";
+    dragHandleCel.title = "Drag to reorder within same priority and domain";
+    tr.appendChild(dragHandleCel);
+
+    // Row drag: only valid within the same domain and same rank run
+    tr.draggable = true;
+    tr.dataset.domain = r.domain;
+    tr.dataset.rank = String(r.rank);
+    tr.addEventListener("dragstart", (e) => {
+      _tableReorderPayload = { r };
+      tr.style.opacity = "0.5";
+      if (e.dataTransfer) e.dataTransfer.effectAllowed = "move";
+    });
+    tr.addEventListener("dragend", () => {
+      tr.style.opacity = "1";
+      tr.style.outline = "";
+      _tableReorderPayload = null;
+    });
+    tr.addEventListener("dragover", (e) => {
+      if (!_tableReorderPayload) return;
+      const src = _tableReorderPayload.r;
+      // Reject if different domain or different rank
+      if (src.domain !== r.domain || src.rank !== r.rank) return;
+      e.preventDefault();
+      e.stopPropagation();
+      if (e.dataTransfer) e.dataTransfer.dropEffect = "move";
+      const rect = tr.getBoundingClientRect();
+      const mid = rect.top + rect.height / 2;
+      tr.style.outline = "2px solid rgba(37,99,235,0.7)";
+      tr.dataset.dropPosition = e.clientY < mid ? "before" : "after";
+    });
+    tr.addEventListener("dragleave", () => {
+      tr.style.outline = "";
+      delete tr.dataset.dropPosition;
+    });
 
     // ── Priority cell: select for inline reprioritize ──
     const prioCel = document.createElement("td");
@@ -1839,6 +2014,7 @@ try {
 
   const tableHeaderRowHtml =
     `<tr style="border-bottom:2px solid rgba(107,114,128,0.25);">` +
+      `<th style="padding:6px 4px;width:18px;"></th>` +
       `<th style="padding:6px 8px;font-size:11px;text-transform:uppercase;` +
         `letter-spacing:.05em;color:#9ca3af;font-weight:600;white-space:nowrap;">Priority</th>` +
       `<th style="padding:6px 8px;font-size:11px;text-transform:uppercase;` +
@@ -1904,6 +2080,64 @@ try {
     for (const r of domainTasks) {
       tbody.appendChild(buildTableRowEl(r));
     }
+
+    // tbody drop handler: reorder within same domain AND same rank run
+    tbody.addEventListener("dragover", (e) => {
+      if (!_tableReorderPayload) return;
+      e.preventDefault();
+      if (e.dataTransfer) e.dataTransfer.dropEffect = "move";
+    });
+    tbody.addEventListener("drop", async (e) => {
+      e.preventDefault();
+      if (!_tableReorderPayload) return;
+      const { r: srcRecord } = _tableReorderPayload;
+      _tableReorderPayload = null;
+
+      // Reject cross-domain drops
+      if (srcRecord.domain !== domain) return;
+
+      // Find the target row and its dropPosition marker
+      const allRowEls = Array.from(tbody.children);
+      let dropIdx = allRowEls.length;
+      for (let i = 0; i < allRowEls.length; i++) {
+        const pos = allRowEls[i].dataset.dropPosition;
+        if (pos === "before") { dropIdx = i; break; }
+        if (pos === "after")  { dropIdx = i + 1; break; }
+      }
+      for (const el of allRowEls) { delete el.dataset.dropPosition; el.style.outline = ""; }
+
+      // Collect only same-rank records within this domain for renumbering
+      const sameRankRecords = domainTasks.filter(r => r.rank === srcRecord.rank);
+      // Cross-rank drop: reject (target row rank differs)
+      const allSameRankPaths = new Set(sameRankRecords.map(r2 => r2.path + ":" + r2.line));
+      const srcKey = srcRecord.path + ":" + srcRecord.line;
+      if (!allSameRankPaths.has(srcKey)) return;
+
+      // Compute the insertion index within the same-rank run.
+      // The rows in tbody are all domainTasks (mixed ranks); we must remap
+      // the overall dropIdx to an index within the same-rank run.
+      const sameRankEls = allRowEls.filter(el =>
+        el.dataset.rank === String(srcRecord.rank));
+      const domainRowEls = allRowEls;
+      // Re-derive dropIdx within same-rank rows
+      let rankDropIdx = sameRankEls.length;
+      for (let i = 0; i < sameRankEls.length; i++) {
+        const domainIdx = domainRowEls.indexOf(sameRankEls[i]);
+        if (domainIdx >= dropIdx) { rankDropIdx = i; break; }
+      }
+
+      const srcRankIdx = sameRankRecords.findIndex(
+        r2 => r2.path === srcRecord.path && r2.line === srcRecord.line);
+      if (srcRankIdx === -1) return;
+
+      const newSeq = sameRankRecords.slice();
+      newSeq.splice(srcRankIdx, 1);
+      const insertAt = rankDropIdx > srcRankIdx ? rankDropIdx - 1 : rankDropIdx;
+      newSeq.splice(Math.min(insertAt, newSeq.length), 0, srcRecord);
+
+      await renumberGroup(newSeq);
+    });
+
     table.appendChild(tbody);
 
     tableWrapper.appendChild(table);
