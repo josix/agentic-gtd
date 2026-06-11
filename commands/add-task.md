@@ -6,21 +6,20 @@ allowed-tools: Read, Edit, Write, Glob, Task, AskUserQuestion
 
 # /add-task — Capture a New Task
 
-## Domain Mapping
+## Domain Resolution
 
-| Argument value            | Target file                  |
-|---------------------------|------------------------------|
-| `fulltime`                | `tasks/fulltime.md`          |
-| `parttime`, `part-time`, or `pt` | `tasks/parttime.md`  |
-| `side` or `side-projects` | `tasks/side-projects.md`     |
-| `oss` or `open-source`    | `tasks/open-source.md`       |
-| `knowledge`               | `tasks/knowledge.md`         |
+Read `tasks/domains.md` to get the current list of domains. Each row has a `canonical` name and an `aliases` column (comma-separated). The target file for a domain is `tasks/<canonical>.md`.
 
-Note: the Triage subagent emits domain using the canonical forms `fulltime`, `parttime`, `side-projects`, `open-source`, `knowledge`; these must remain present in this table so the proposal's domain resolves to the correct file.
+To resolve an argument value to a domain:
+1. Check if it matches any `canonical` value exactly.
+2. If not, check if it matches any alias in any row's `aliases` column.
+3. Use the first match found.
 
-If the domain argument does not match any of the above, emit an error:
+Note: the Triage subagent emits domain using canonical names; these will always resolve correctly against the registry.
+
+If the domain argument does not match any canonical name or alias in `tasks/domains.md`, emit an error:
 ```
-Error: Unknown domain "<value>". Valid domains: fulltime, parttime (alias: part-time, pt), side-projects (alias: side), open-source (alias: oss), knowledge.
+Error: Unknown domain "<value>". Read tasks/domains.md for the current list of valid domains and their aliases.
 ```
 Do NOT write anything to any file.
 
@@ -39,7 +38,7 @@ Valid values: `fulltime`, `parttime`, `side`, `trust`, `long`, `short`, `tedious
 Treat `$ARGUMENTS` (or `$1` / free text) as a raw task description.
 
 Detect backward-compat signals:
-- If the **first token** is a known domain alias (`fulltime`, `parttime`, `part-time`, `pt`, `side`, `side-projects`, `oss`, `open-source`, `knowledge`), capture it as the explicit domain seed.
+- If the **first token** matches a canonical name or alias in `tasks/domains.md` (read it), capture it as the explicit domain seed.
 - If any `key:value` tags are present (`prio:`, `project:`, `effort:`, `due:`, `context:`), capture them as explicit tag seeds.
 
 Recognized seed keys: `prio`, `project`, `effort`, `due`, `context`, `recurs`, `last`.
@@ -75,7 +74,7 @@ The main agent confirms the Triage proposal using TWO `AskUserQuestion` calls (f
 **Call 1 — Core decisions** (4 questions):
 
 - **Q1 — Action**: A) `<reworded_title>` (Recommended), B) keep original raw text. (Other = user types a corrected title.)
-- **Q2 — Domain**: the inferred domain (Recommended) + the other valid domains as alternatives (`fulltime`, `parttime`, `side-projects`, `open-source`, `knowledge`).
+- **Q2 — Domain**: the inferred domain (Recommended) + the other canonical domains from `tasks/domains.md` as alternatives.
 - **Q3 — Priority**: the inferred prio (Recommended) + 2–3 plausible alternatives from the vocabulary (`fulltime`, `parttime`, `side`, `trust`, `long`, `short`, `tedious`).
 - **Q4 — ETA (due date)**: when is this due? Offer (recommended-first based on the proposal's `due`):
   - If the proposal has a `due`, show it as option A (Recommended).
@@ -96,7 +95,7 @@ If Call 2 would have no Details to confirm AND no ambiguities to resolve, you ma
 Overlay the user's answers from Call 1 (Action / Domain / Priority / ETA) and Call 2 (the Details multiSelect + any ambiguity followups) onto the Triage proposal:
 
 - **title**: from Q1 (Call 1).
-- **domain**: from Q2 (Call 1). Must be in the Domain Mapping table. If unknown → error, write nothing.
+- **domain**: from Q2 (Call 1). Must resolve to a canonical name in `tasks/domains.md`. If unknown → error, write nothing.
 - **prio**: from Q3 (Call 1). Must be in the vocabulary (`fulltime|parttime|side|trust|long|short|tedious`). If invalid or missing → warn and default to `short`.
 - **due**: from Q4 (Call 1, the ETA question). "No deadline" → omit. A relative phrase (Today / End of this week / "next friday") → normalize to ISO `YYYY-MM-DD` using the runtime clock. An explicit value must be ISO `YYYY-MM-DD`; if unparseable, warn and omit. Never invent a due date the user did not give.
 - **project / effort / context**: from the Call 2 Details selection — include the tags the user kept selected (or supplied via Other), omit the unselected ones. effort accepts `30m`, `1h`, `2h`, `1.5h`; context is lowercased with leading `@`, comma-separated.

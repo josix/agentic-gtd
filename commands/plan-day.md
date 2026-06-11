@@ -31,7 +31,7 @@ If an unrecognized token appears, emit a warning but continue with defaults for 
    - Parse all incomplete task lines using regex `^- \[ \] (.+)$`.
    - Extract and normalize all tags per the skill's grammar (including `recurs:`/`last:` for recurring tasks).
    - Apply Engage filters in order: recurrence filter (drop recurring tasks whose effective due `last + interval` is after today, reason `recurs-not-due`), effort filter, context filter, energy filter.
-   - Rank surviving tasks using the strict six-level tiebreak algorithm: (1) prio rank, (2) manual `order:` ascending (within-rank tiebreak; missing = sorts last within rank), (3) due-date proximity, (4) effort ascending, (5) domain order, (6) alphabetical. Recurring tasks rank by their effective due.
+   - Rank surviving tasks using the strict six-level tiebreak algorithm: (1) prio rank, (2) manual `order:` ascending (within-rank tiebreak; missing = sorts last within rank), (3) due-date proximity, (4) effort ascending, (5) domain order per `daily_order` column in `tasks/domains.md`, (6) alphabetical. Recurring tasks rank by their effective due.
    - Greedily fill up to `hours * 60` minutes of effort.
 
 4. **Emit chat output** using the Daily Plan format from the skill:

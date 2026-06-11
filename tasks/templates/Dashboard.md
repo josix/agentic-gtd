@@ -23,6 +23,7 @@ const rankMap = {
 const DEFAULT_RANK = 99;
 
 // Domain display order (daily tiebreak: index is the tiebreak weight)
+// /add-domain appends new domains here; unknown domains fall back to default styling.
 const domainOrder = [
   "fulltime",
   "parttime",
@@ -55,6 +56,7 @@ const prioColors = {
 };
 
 // Domain hues
+// /add-domain appends new domains here; unknown domains fall back to default styling.
 const domainColors = {
   "fulltime":     { bg: "rgba(220,38,38,0.15)",   text: "#dc2626", border: "rgba(220,38,38,0.5)"   },
   "parttime":     { bg: "rgba(234,88,12,0.15)",   text: "#ea580c", border: "rgba(234,88,12,0.5)"   },

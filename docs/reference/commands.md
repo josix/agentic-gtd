@@ -1,6 +1,6 @@
 # Commands
 
-Complete index of all nine `agentic-gtd` commands.
+Complete index of all ten `agentic-gtd` commands.
 
 ## Overview
 
@@ -10,6 +10,7 @@ Each command is a slash-command loaded from its source file in `commands/`. The 
 
 | Command | One-line purpose | Source of truth |
 |---------|-----------------|-----------------|
+| `/add-domain` | Register a new domain so tasks can be filed, planned, and reviewed under it | [`../../commands/add-domain.md`](../../commands/add-domain.md) |
 | `/add-task` | Append a new well-formed task line to a domain file | [`../../commands/add-task.md`](../../commands/add-task.md) |
 | `/clear-tasks` | Mark completed or abandoned tasks as resolved and archive them | [`../../commands/clear-tasks.md`](../../commands/clear-tasks.md) |
 | `/layout` | Render a structured view of all tasks across domains | [`../../commands/layout.md`](../../commands/layout.md) |

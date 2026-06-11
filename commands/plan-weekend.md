@@ -31,9 +31,9 @@ Example:
    - Recurrence eligibility (effective due ≤ today) applies to the ranked plan below, just like daily mode.
 
    **b. Rank tasks using weekend domain weighting**:
-   - Domain tie-break order (weekend, reversed from daily): `side-projects` < `open-source` < `knowledge` < `parttime` < `fulltime`
+   - Domain tie-break order for weekend is driven by the `weekend_order` column in `tasks/domains.md`. Default order (lower = higher priority): `side-projects`(1) < `open-source`(2) < `knowledge`(3) < `parttime`(4) < `fulltime`(5).
    - Primary ranking is still by prio rank ascending (1=fulltime, 2=parttime, 3=side, … 7=tedious, 99=missing).
-   - Tiebreak order uses the strict six-level algorithm: (1) prio rank, (2) manual `order:` ascending (within-rank; missing = sorts last), (3) due-date proximity, (4) effort ascending, (5) weekend domain order (step b above), (6) alphabetical.
+   - Tiebreak order uses the strict six-level algorithm: (1) prio rank, (2) manual `order:` ascending (within-rank; missing = sorts last), (3) due-date proximity, (4) effort ascending, (5) weekend domain order per registry, (6) alphabetical.
 
    **c. Fulltime sectioning**:
    - Non-overdue `prio:fulltime` tasks → remove from main list, place in `## Full-time (optional this weekend)`.
