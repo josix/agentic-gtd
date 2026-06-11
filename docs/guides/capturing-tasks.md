@@ -24,7 +24,7 @@ Use `/add-task` when you already know the domain, description, and at least a ro
 
 | Argument | Required | Description |
 |----------|----------|-------------|
-| `domain` | Yes (first token) | `fulltime`, `parttime`, `side` / `side-projects`, `oss` / `open-source`, `knowledge` |
+| `domain` | Yes (first token) | Any domain registered in `tasks/domains.md`; aliases come from the registry's aliases column. Use `/add-domain` to register a new one. Built-in examples: `fulltime`, `parttime`, `side` / `side-projects`, `oss` / `open-source`, `knowledge` |
 | task description | Yes | Free-form text before any `key:value` tags |
 | `prio:`, `project:`, `effort:`, `due:`, `context:` | No | Optional tags |
 

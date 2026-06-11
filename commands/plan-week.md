@@ -41,7 +41,7 @@ If an unrecognized token appears, emit a warning but continue with the default.
    - **No due date, non-recurring**: place in the **Today** bucket (user-confirmed default).
 
 6. **Per-day ranking and greedy fill**: for each day bucket (today through today+6):
-   - Apply gtd-prioritization DAILY-mode ranking within the bucket (strict five-level tiebreak: prio rank, due-date proximity, effort ascending, domain order, alphabetical).
+   - Apply gtd-prioritization DAILY-mode ranking within the bucket (strict six-level tiebreak: prio rank, manual `order:` ascending, due-date proximity, effort ascending, domain order, alphabetical).
    - Greedily fill up to `hours-per-day * 60` minutes for that day.
    - Tasks that exceed the day's remaining capacity go to chat Deferred with reason `over-time` for that day's date. Do NOT auto-push overflow tasks to the next day.
 

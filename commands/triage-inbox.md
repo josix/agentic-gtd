@@ -13,17 +13,9 @@ Reads `tasks/inbox.md`, turns raw capture lines into well-formed GTD task lines 
 
 ---
 
-## Domain Mapping
+## Domain Resolution
 
-Same as `/add-task` and `/clear-tasks`:
-
-| Domain key      | Target file                  |
-|-----------------|------------------------------|
-| `fulltime`      | `tasks/fulltime.md`          |
-| `parttime`      | `tasks/parttime.md`          |
-| `side-projects` | `tasks/side-projects.md`     |
-| `open-source`   | `tasks/open-source.md`       |
-| `knowledge`     | `tasks/knowledge.md`         |
+Read `tasks/domains.md` to get the current domain registry. Each row maps a `canonical` name to `tasks/<canonical>.md`. Aliases in the `aliases` column also resolve to the canonical file. This is the authoritative list — same source as `/add-task` and `/clear-tasks`.
 
 ---
 
@@ -63,7 +55,7 @@ Each proposal in the block should follow the task-proposal format from the Triag
 ```
 raw_text: <the exact original inbox line text, for matching>
 reworded_title: <imperative, verb-first next action>
-domain: <fulltime|parttime|side-projects|open-source|knowledge>
+domain: <canonical domain name from tasks/domains.md>
 prio: <fulltime|parttime|side|trust|long|short|tedious>
 project: <name | (none)>
 impact: <long|short | (none)>
@@ -125,7 +117,7 @@ For each item selected in Step 4a, issue ONE `AskUserQuestion` call with these *
    Mark whichever option matches the agent's proposal with "(proposed)" (e.g. if the agent inferred `recurs:weekly`, label `Recurring weekly (proposed)`; if it inferred a due, label that due `(proposed)`; if neither, label `No due date (proposed)`). A recurring choice writes `recurs:` and OMITS `due:`; a dated choice writes `due:` and no `recurs:`.
 4. **Context** — sensible `@tag` options (e.g. `@computer`, `@computer,@local-env`) + Other; default = proposed.
 
-**Domain** is asked ONLY when the proposed domain is `(unknown)` or flagged ambiguous. When so, issue a SHORT leading `AskUserQuestion` call with a single Domain question (the 5 domains) BEFORE the four-question call above. An unambiguous proposed domain is auto-accepted (per the Auto-accept rule) and is not asked.
+**Domain** is asked ONLY when the proposed domain is `(unknown)` or flagged ambiguous. When so, issue a SHORT leading `AskUserQuestion` call with a single Domain question listing the canonical domains from `tasks/domains.md` BEFORE the four-question call above. An unambiguous proposed domain is auto-accepted (per the Auto-accept rule) and is not asked.
 
 **Batching:** every `AskUserQuestion` call stays ≤4 questions. Worst case is two calls per item: a 1-question Domain call, then the 4-question field call. Never exceed four questions in a single call.
 

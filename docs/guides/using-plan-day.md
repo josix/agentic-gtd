@@ -4,7 +4,7 @@ Build a ranked, filtered daily plan from your open tasks.
 
 ## Overview
 
-`/plan-day` reads all five domain files, ranks every open task using the priority ladder and tiebreak chain, applies your time/energy/context filters, and outputs a greedy-filled numbered plan for today.
+`/plan-day` reads every domain file listed in `tasks/domains.md`, ranks every open task using the priority ladder and tiebreak chain, applies your time/energy/context filters, and outputs a greedy-filled numbered plan for today.
 
 **Source of truth:** [`../../commands/plan-day.md`](../../commands/plan-day.md)
 
@@ -29,7 +29,7 @@ All arguments are optional.
 
 **Energy filter behavior:**
 
-- `energy:low` — drops `fulltime`-prio tasks and large-effort tasks; prefers `tedious` and small tasks
+- `energy:low` — drops `fulltime`- and `parttime`-prio tasks and large-effort tasks; prefers `tedious` and small tasks
 - `energy:med` — standard ranking, no filter
 - `energy:high` — no filter applied
 

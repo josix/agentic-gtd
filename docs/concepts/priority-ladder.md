@@ -4,7 +4,7 @@ The `prio:` tag is the single field that sets a task's ranking position — it i
 
 ## Overview
 
-`agentic-gtd` uses a fixed seven-tier priority ladder to rank tasks across all five domains. The ladder reflects real-world urgency: job deliverables rank above personal learning, commitments to others rank above nice-to-haves. The rank is used as the primary sort key in every plan.
+`agentic-gtd` uses a fixed seven-tier priority ladder to rank tasks across all domains. The 7-tier ladder is fixed and never changes; the set of domains is extensible via `/add-domain`. The ladder reflects real-world urgency: job deliverables rank above personal learning, commitments to others rank above nice-to-haves. The rank is used as the primary sort key in every plan.
 
 ## Ladder
 

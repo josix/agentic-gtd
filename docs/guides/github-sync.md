@@ -54,7 +54,7 @@ flowchart TD
 
 | Markdown source | GitHub Project field | Values |
 |-----------------|----------------------|--------|
-| filename stem | `Domain` | fulltime, side-projects, open-source, knowledge |
+| filename stem | `Domain` | Domains with `github_sync: yes` in `tasks/domains.md` (built-in: fulltime, side-projects, open-source, knowledge). `parttime` is `github_sync: no` by design. New domains require manually adding a Domain single-select option in the GitHub Project and its option-ID in `.agentic-gtd.local.md` (see `commands/add-domain.md` Step 8); otherwise `/sync-github` skips them with a warning. |
 | `prio:` tag | `Priority` | fulltime, side, trust, long, short, tedious |
 | `due:` tag | `Due` | YYYY-MM-DD (empty if absent or malformed) |
 | checkbox `[ ]` / `[x]` | `Status` | Todo / Done |

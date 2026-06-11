@@ -9,7 +9,7 @@ description: This skill should be used when prioritizing tasks, building a daily
 
 - **Source files**: glob `tasks/*.md` relative to plugin root.
 - **Excluded file**: `tasks/inbox.md` — excluded by basename match. Never read during planning.
-- **Domains**: determined by filename stem: `fulltime`, `parttime`, `side-projects`, `open-source`, `knowledge`.
+- **Domains**: determined by filename stem. The authoritative domain list is in `tasks/domains.md` (read it). Default domains: `fulltime`, `parttime`, `side-projects`, `open-source`, `knowledge`.
 
 ## Task Line Grammar and Parsing
 
@@ -26,7 +26,7 @@ Lines matching `- [x]` (completed) and all comment lines or non-task lines are i
 
 **Tag extraction**: apply global regex `(\w+):(\S+)` to the full task line. All key:value pairs after the title are tags.
 
-**Recognized tag keys**: `prio`, `project`, `effort`, `impact`, `due`, `context`, `recurs`, `last`
+**Recognized tag keys**: `prio`, `project`, `effort`, `impact`, `due`, `context`, `recurs`, `last`, `order`
 
 **Normalization rules**:
 
@@ -42,6 +42,7 @@ Lines matching `- [x]` (completed) and all comment lines or non-task lines are i
   - Malformed due → `no-due` + warning added to output
 - **context → comma-separated list**, each element normalized to lowercase with leading `@` (e.g. `@computer`, `@phone`)
 - **prio**: must match controlled vocabulary; unrecognized or missing → rank 99 + warning
+- **order → positive integer**: within-rank manual tiebreak written by the dashboard drag-to-reorder. Unparseable or missing → none (sorts after ordered tasks within the same prio rank, treated as Infinity in comparator).
 - **recurs → interval in days** (marks a standing/recurring task):
   - `Nd` → N days (e.g. `3d` → 3)
   - `Nw` → N×7 days (e.g. `1w` → 7, `2w` → 14)
@@ -82,10 +83,11 @@ The rank is NEVER overridden by any other field. This ladder is strict.
 Apply these criteria in order until a winner is determined:
 
 1. **prio rank ascending** — rank 1 before rank 7; rank 99 always last. NEVER overridden.
-2. **due-date proximity** — earlier due date first; `no-due` tasks sort after all dated tasks. For recurring tasks (`recurs:` present), use the **effective due** (`last + interval`) here.
-3. **effort ascending** — smaller effort first; `unknown` effort sorts last.
-4. **domain order** (daily mode tie-break): `fulltime` < `parttime` < `side-projects` < `open-source` < `knowledge`. In weekend mode, step 4 (domain tie-break) is REPLACED by the Weekend domain tie-break defined in Weekend Mode Step (b): `side-projects` < `open-source` < `knowledge` < `parttime` < `fulltime`. Steps 1–3 and 5 are identical in both modes.
-5. **alphabetical by title** — ensures total order (case-insensitive, ascending).
+2. **manual order ascending** — tasks with `order:N` sort before tasks without an order tag within the same prio rank. Tasks without `order:` are treated as Infinity (sort last within the rank). The `order:` value NEVER crosses prio-rank boundaries; rank is never overridden.
+3. **due-date proximity** — earlier due date first; `no-due` tasks sort after all dated tasks. For recurring tasks (`recurs:` present), use the **effective due** (`last + interval`) here.
+4. **effort ascending** — smaller effort first; `unknown` effort sorts last.
+5. **domain order** (tiebreak): read `tasks/domains.md` and sort domains by their `daily_order` column (ascending) for daily mode, or `weekend_order` column for weekend mode. Default daily order: `fulltime`(1) < `parttime`(2) < `side-projects`(3) < `open-source`(4) < `knowledge`(5). Default weekend order: `side-projects`(1) < `open-source`(2) < `knowledge`(3) < `parttime`(4) < `fulltime`(5). In weekend mode, step 5 is REPLACED by the `weekend_order` column values. Steps 1–4 and 6 are identical in both modes.
+6. **alphabetical by title** — ensures total order (case-insensitive, ascending).
 
 ## Daily Mode (GTD Engage — filter THEN rank)
 
@@ -119,7 +121,7 @@ Before building the plan, emit `## Weekly Review sweep` listing:
 The recurrence eligibility filter (effective_due ≤ today) also applies to the weekend ranked plan, identically to daily mode Step 0.
 
 **Step (b) — Weekend domain tie-break** (reverses daily order):
-Domain priority for weekend: `side-projects` < `open-source` < `knowledge` < `parttime` < `fulltime`
+Domain priority for weekend is determined by the `weekend_order` column in `tasks/domains.md`. Default order: `side-projects`(1) < `open-source`(2) < `knowledge`(3) < `parttime`(4) < `fulltime`(5)
 (i.e., fulltime sorts last in domain tiebreak; side-projects most favored for weekend)
 
 **Step (c) — Fulltime sectioning**:
@@ -193,9 +195,9 @@ Used by `/plan-week`. Builds a 7-day plan (today through today+6) using the same
 - Due after window end: excluded, Deferred (`out-of-window`).
 - No due date, non-recurring: bucket → Today (user-confirmed default).
 
-**Per-day fill**: apply the five-level tiebreak ranking within each day's bucket; greedily fill up to `hours-per-day * 60` minutes. Overflow → Deferred with reason `over-time <date>`. Tasks are NEVER auto-pushed to the next day.
+**Per-day fill**: apply the six-level tiebreak ranking within each day's bucket; greedily fill up to `hours-per-day * 60` minutes. Overflow → Deferred with reason `over-time <date>`. Tasks are NEVER auto-pushed to the next day.
 
-**Ranking algorithm**: identical to Daily mode (prio rank → due proximity → effort → domain order → alphabetical). No special day-level weighting.
+**Ranking algorithm**: identical to Daily mode (prio rank → manual order ascending → due proximity → effort → domain order → alphabetical). No special day-level weighting.
 
 ## GTD Pillar Mapping
 

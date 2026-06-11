@@ -34,16 +34,9 @@ A task carrying a `recurs:` tag is a standing review (see the gtd-prioritization
 
 Parse `$ARGUMENTS`:
 
-- **domain** (optional): if the first token is a known domain alias, scope the search to that single file. Same map as `/add-task` and `/review-tasks`:
-  | Argument value            | Target file                  |
-  |---------------------------|------------------------------|
-  | `fulltime`                | `tasks/fulltime.md`          |
-  | `parttime`, `part-time`, or `pt` | `tasks/parttime.md`  |
-  | `side` or `side-projects` | `tasks/side-projects.md`     |
-  | `oss` or `open-source`    | `tasks/open-source.md`       |
-  | `knowledge`               | `tasks/knowledge.md`         |
+- **domain** (optional): if the first token matches a canonical name or alias in `tasks/domains.md` (read it), scope the search to that single file (`tasks/<canonical>.md`).
 - **matcher** (optional): remaining free text. Case-insensitive substring match against open task titles to narrow candidates.
-- If a leading token looks like a domain but matches none of the above, warn and treat the whole argument as a matcher across all domains.
+- If a leading token looks like a domain but matches nothing in `tasks/domains.md`, warn and treat the whole argument as a matcher across all domains.
 
 ## Execution Steps
 

@@ -1,6 +1,6 @@
 # Agentic GTD
 
-A Claude Code plugin that ingests tasks from local markdown files across five domains, produces ranked daily and weekend plans using a fixed GTD priority ladder, and one-way syncs tasks into a private GitHub Project.
+A Claude Code plugin that ingests tasks from local markdown files across configurable domains (five built-in, extensible via `/add-domain`), produces ranked daily and weekend plans using a fixed GTD priority ladder, and one-way syncs tasks into a private GitHub Project.
 
 ## Overview
 
@@ -46,7 +46,7 @@ flowchart LR
 
 | Feature | Description |
 |---------|-------------|
-| **Five domains** | Tasks partitioned across fulltime, parttime, side-projects, open-source, and knowledge |
+| **Domains** | Five default domains (fulltime, parttime, side-projects, open-source, knowledge), extensible via `/add-domain`; registry in `tasks/domains.md` |
 | **Priority ladder** | Seven-tier fixed ranking (`fulltime` → `tedious`); never overridden |
 | **Daily plan** | `/plan-day` filters by hours, energy, and context; saves to `tasks/plans/` |
 | **Week plan** | `/plan-week` buckets tasks by due date across a 7-day window |
@@ -64,7 +64,7 @@ flowchart LR
 
 ### Concepts
 
-- [Five Domains](concepts/five-domains.md) - How tasks are partitioned by life area
+- [Domains](concepts/five-domains.md) - How tasks are partitioned by life area
 - [Task Line Format](concepts/task-line-format.md) - Full tag reference
 - [Priority Ladder](concepts/priority-ladder.md) - The seven-tier ranking system
 - [Ranking](concepts/ranking.md) - How daily and weekend plans are sorted
@@ -81,7 +81,7 @@ flowchart LR
 
 ### Reference
 
-- [Commands](reference/commands.md) - All nine commands at a glance
+- [Commands](reference/commands.md) - All ten commands at a glance
 - [Skills](reference/skills.md) - The two plugin skills
 - [Triage Agent](reference/triage-agent.md) - Triage agent specification
 - [FAQ](reference/faq.md) - Missing tags and common questions

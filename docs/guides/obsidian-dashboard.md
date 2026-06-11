@@ -11,8 +11,9 @@ The dashboard reads and writes the same `tasks/*.md` files that the slash-comman
 The dashboard (`tasks/templates/Dashboard.md`) is a DataviewJS block that renders:
 
 - A **Summary bar** with stat pills: total open, overdue, due this week, per-domain counts
-- A **Board** grouped by priority tier, each card with Move reprioritize, Done, and Won't Fix controls
-- A **Table** grouped by domain (collapsible), each row with inline priority, due, effort, and context editors plus resolve buttons
+- A **Status Board** with three columns — TODO (auto-populated from today's plan), IN PROGRESS (drag or select), DONE / WON'T FIX (today's resolutions)
+- A **Board** grouped by priority tier, each column's cards clustered under small project sub-headers (groups ordered by best-ranked task in that project; a trailing "(no project)" group collects unaffiliated cards), each card with Move reprioritize, Done, Won't Fix, Block/Unblock controls, and drag-to-reorder within the same priority column
+- A **Table** grouped by domain (collapsible), each domain's rows further clustered under project sub-header rows (same suppression rule as the Board), each row with inline priority, due, effort, and context editors plus resolve, Block/Unblock, and drag-to-reorder within the same domain and priority run
 - A **Quick capture** form for raw inbox entries
 - An **Inbox needs triage** section listing all open inbox items
 
@@ -44,8 +45,8 @@ The dashboard file is git-tracked and safe to push. Live task data (`tasks/*.md`
 Every board card and table row has Done and Won't Fix buttons. Clicking confirms with a dialog, then rewrites the source task line in place:
 
 - **Done** — marks the checkbox `[x]`, appends `resolution:done` and `resolved:<date>` tags
-- **Won't Fix** — marks the checkbox `[-]`, appends `resolution:wont-fix` and `resolved:<date>` tags
-- **Recurring tasks** — Done leaves the checkbox `[ ]` and updates only the `last:` tag to today, rolling the cycle forward (mirrors `/clear-tasks` semantics)
+- **Won't Fix** — marks the checkbox `[-]`, appends `resolution:wontfix` and `resolved:<date>` tags
+- **Recurring tasks** — Done leaves the checkbox `[ ]` and updates only the `last:` tag to today, rolling the cycle forward (mirrors `/clear-tasks` semantics). The task appears in the DONE / WON'T FIX column for the rest of the day with a ♻ Recurring badge showing the next cycle interval.
 
 ### 2. Inline Field Editing (Table)
 
@@ -61,6 +62,50 @@ Changing any control rewrites only that field token in the source line. Clearing
 ### 3. Reprioritize via Board
 
 Each board card has a "Move" select listing the seven priority tiers. Changing it rewrites `prio:` in the source line; on auto-refresh the card moves to the new column.
+
+### 4. Block / Unblock Toggle
+
+Every board card and table row has a "🚫 Block" / "🚫 Unblock" button (compact "🚫" in the table). Clicking it toggles the `blocked:true` tag directly in the source line — no confirmation dialog. Blocked tasks display a red "🚫 Blocked" badge in the card meta row and next to the task title in the table. Plan panel rows show the badge read-only. Blocked tasks are not hidden or reordered; they remain in their normal position. Dataview auto-refreshes the view after the write.
+
+### 5. Status Board (Drag-and-Drop Execution Tracking)
+
+The **Status Board** sits below the Plan panels and above Quick capture. It has three columns:
+
+- **TODO** — auto-populated from tasks that appear in any active plan panel (Today, Tomorrow, This Week, or Weekend), via `scheduledTitles`. Tasks move out of this column automatically when marked In Progress.
+- **IN PROGRESS** — open tasks with `status:in-progress`. Drag a card from TODO here, or use the "Status ▸" select on any card.
+- **DONE / WON'T FIX** — tasks resolved today (checkbox `[x]` or `[-]` with `resolved:<today>`) plus recurring tasks whose cycle was completed today. This column is read-only; cards show a ✓ Done, ✕ Won't Fix, or ♻ Recurring marker. The column clears at midnight rollover.
+
+Within each column, cards are clustered under small project sub-headers (same styling and suppression rule as the Board's priority columns). Sub-headers are display-only; they do not affect drag-and-drop behaviour because drop handlers are attached at the column level.
+
+**Drag-and-drop behaviour:**
+- Drag a TODO card → drop on IN PROGRESS: sets `status:in-progress` in the source line; checkbox stays `[ ]`.
+- Drag an IN PROGRESS card → drop on TODO: clears `status:` from the source line.
+- Drag any card → drop on DONE / WON'T FIX: marks the task done (sets checkbox `[x]`, appends `resolution:done` and `resolved:<date>`, clears `status:`). No confirm dialog on drag. For recurring tasks, dropping on DONE bumps `last:` to today and rolls the cycle forward — the card appears in the DONE column for the rest of the day with a ♻ Recurring badge, while the underlying line stays `- [ ]` with `last:` updated (consistent with `/clear-tasks` semantics).
+
+**Select fallback:** each TODO and IN PROGRESS card has a compact "Status ▸" select with options: To do, In progress, Done, Won't fix. Done and Won't fix routes through the standard resolve handler (includes confirm dialog). Won't fix sets checkbox `[-]` and `resolution:wontfix`. For recurring tasks, selecting Done fires a "cycle completed" notice and shows the task in DONE for the rest of the day.
+
+The dashboard auto-rebuilds after every write so columns recompute from the source markdown immediately.
+
+### 6. Drag-to-Reorder (Manual Prioritization)
+
+Board cards and Table rows can be reordered by dragging, providing a within-rank manual tiebreak that persists to the source task files.
+
+**Board (by Priority column):**
+- Each card is draggable. Grab a card and drop it above or below another card in the same column to change its position.
+- On drop, the dashboard writes a dense `order:N` tag (1, 2, 3, …) to every task in that priority column in the new visual sequence — "visual sequence" here means the clustered order (project groups in appearance order, no-project group trailing). Cross-project drops are accepted but snap back into the card's own project group when the dashboard rebuilds; clustering wins for display while manual `order:` persists within a project group.
+- Sub-headers are display-only visual separators — no tags are written for them.
+- Cross-column drops are no-ops — dragging a card to a different priority column is rejected. Use the "Move ▸" select to change priority rank.
+
+**Table (by Domain group):**
+- Each row has a drag handle (⠿) in the first column. Drag a row and drop it above or below another row to reorder.
+- Drop is only valid within the same domain group AND among rows with the same priority rank. Cross-domain or cross-rank drops are no-ops.
+- On a valid drop, `order:N` is written densely to all tasks in that same-rank run within the domain, following the clustered visual top-to-bottom order (project groups in first-appearance order, no-project trailing) — same snap-back semantics as the Board.
+
+**Semantics:**
+- `order:N` is a within-rank tiebreak: it never overrides the prio rank ladder. A rank-1 task without `order:` always sorts before any rank-3 task regardless of its `order:` value.
+- Tasks without an `order:` tag sort after all explicitly ordered tasks within the same rank (treated as Infinity in the comparator), then fall back to the normal due/effort/domain/title tiebreaks.
+- The plan commands (`/plan-day`, `/plan-week`, `/plan-weekend`) use `order:` as their second tiebreak criterion (after prio rank), so the manual order you set in the dashboard carries directly into generated plans.
+- `order:` is written by the dashboard only; do not set it manually.
 
 ## Capture to Triage Loop
 

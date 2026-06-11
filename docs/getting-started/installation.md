@@ -59,6 +59,8 @@ claude --plugin-dir ~/agentic-gtd
          tasks/open-source.md tasks/knowledge.md tasks/inbox.md
    ```
 
+   Note: this `touch` command is only needed for the five built-in domains. For any additional domains, `/add-domain` creates the task file and registers it in `tasks/domains.md` automatically.
+
 2. (Optional) Initialise GitHub sync:
 
    ```sh

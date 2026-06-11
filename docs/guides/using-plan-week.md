@@ -4,7 +4,7 @@ Build a 7-day rolling plan bucketed by each task's effective due date.
 
 ## Overview
 
-`/plan-week` reads all five domain files and distributes open tasks across today and the next six days based on their `due:` tag (or computed effective due for recurring tasks), applying a greedy fill per day against your hours budget.
+`/plan-week` reads every domain file listed in `tasks/domains.md` and distributes open tasks across today and the next six days based on their `due:` tag (or computed effective due for recurring tasks), applying a greedy fill per day against your hours budget.
 
 **Source of truth:** [`../../commands/plan-week.md`](../../commands/plan-week.md)
 

@@ -59,7 +59,7 @@ nav:
       - Installation: getting-started/installation.md
       - Quick Start: getting-started/quick-start.md
   - Concepts:
-      - Five Domains: concepts/five-domains.md
+      - Domains: concepts/five-domains.md
       - Task Line Format: concepts/task-line-format.md
       - Priority Ladder: concepts/priority-ladder.md
       - Ranking: concepts/ranking.md

@@ -22,7 +22,7 @@ The task is appended to `tasks/fulltime.md` as a single `- [ ]` line with the ta
 /plan-day 6
 ```
 
-`agentic-gtd` reads all five domain files, ranks every open task by the priority ladder (see [Priority Ladder](../concepts/priority-ladder.md)), applies a greedy time-fill against your 6-hour budget, and prints a numbered plan.
+`agentic-gtd` reads every domain file listed in `tasks/domains.md`, ranks every open task by the priority ladder (see [Priority Ladder](../concepts/priority-ladder.md)), applies a greedy time-fill against your 6-hour budget, and prints a numbered plan.
 
 The plan is also saved to `tasks/plans/<today's date>.md` so the Obsidian dashboard can display it.
 

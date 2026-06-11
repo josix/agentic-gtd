@@ -1,6 +1,6 @@
 # Ranking
 
-`agentic-gtd` uses a deterministic five-key tiebreak chain to produce a total order for every plan.
+`agentic-gtd` uses a deterministic six-key tiebreak chain to produce a total order for every plan.
 
 ## Overview
 
@@ -18,7 +18,7 @@ flowchart TD
     R0 --> R1["Effort filter:\ndrop tasks whose effort\nexceeds remaining hours budget"]
     R1 --> R2["Context filter:\ndrop tasks that don't match\nrequested context (if set)"]
     R2 --> R3["Energy filter:\nlow energy → drop fulltime/parttime\nand large-effort tasks"]
-    R3 --> RANK["Five-level tiebreak rank:\n1. prio rank (1-7, 99 last)\n2. due-date proximity (earlier first)\n3. effort ascending (smaller first)\n4. domain order (mode-dependent)\n5. alphabetical by title"]
+    R3 --> RANK["Six-level tiebreak rank:\n1. prio rank (1-7, 99 last)\n2. manual order: ascending\n3. due-date proximity (earlier first)\n4. effort ascending (smaller first)\n5. domain order (mode-dependent)\n6. alphabetical by title"]
     RANK --> FILL["Greedy fill:\niterate ranked list,\naccumulate effort minutes,\ninclude until hours budget exhausted"]
     FILL --> OUT1["Ranked plan\n(fits within hours)"]
     FILL --> OUT2["Deferred / filtered out\n(over-time, low-energy,\ncontext-mismatch, recurs-not-due)"]
@@ -42,10 +42,11 @@ The **primary sort key** (`prio` rank) is identical in both modes.
 When two tasks share the same `prio` rank, the plan resolves ties in this order:
 
 1. `prio` rank ascending (NEVER overridden)
-2. Due-date proximity — earlier first; tasks with no due date sort after all dated tasks
-3. Effort ascending — smaller effort first; unknown effort sorts last
-4. Domain order — per the mode table above
-5. Alphabetical by title — guarantees a total order with no ties
+2. Manual `order:` ascending — `order:N` tasks sort before untagged tasks within the same prio rank; never crosses rank boundaries
+3. Due-date proximity — earlier first; tasks with no due date sort after all dated tasks
+4. Effort ascending — smaller effort first; unknown effort sorts last
+5. Domain order — per the mode table above; order is registry-driven (`daily_order`/`weekend_order` columns in `tasks/domains.md`); default daily sequence: fulltime < parttime < side-projects < open-source < knowledge
+6. Alphabetical by title — guarantees a total order with no ties
 
 ## Greedy Time Fill
 

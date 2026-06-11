@@ -1,6 +1,6 @@
 ---
 description: Read-only review of all unresolved tasks across tasks/*.md, grouped by domain and sorted by prio ladder rank, showing every metadata field.
-argument-hint: "[domain] (optional: fulltime | side-projects (alias side) | open-source (alias oss) | knowledge)"
+argument-hint: "[domain] (canonical name or alias from tasks/domains.md; e.g. fulltime, side, oss)"
 allowed-tools: Read, Glob, Grep
 ---
 
@@ -12,15 +12,8 @@ A read-only review surface: list every incomplete task with its full metadata so
 
 Parse `$ARGUMENTS`:
 
-- **domain** (optional): if the first token is a known domain alias, scope the review to that single file. Recognized aliases (same map as `/add-task`):
-  | Argument value            | Target file                  |
-  |---------------------------|------------------------------|
-  | `fulltime`                | `tasks/fulltime.md`          |
-  | `parttime`, `part-time`, or `pt` | `tasks/parttime.md`  |
-  | `side` or `side-projects` | `tasks/side-projects.md`     |
-  | `oss` or `open-source`    | `tasks/open-source.md`       |
-  | `knowledge`               | `tasks/knowledge.md`         |
-- If a domain token is present but matches none of the above, emit a warning and fall back to reviewing all domains.
+- **domain** (optional): if the first token matches a canonical name or alias in `tasks/domains.md` (read it), scope the review to that single file (`tasks/<canonical>.md`).
+- If a domain token is present but matches nothing in `tasks/domains.md`, emit a warning and fall back to reviewing all domains.
 - If no argument is given, review all domains.
 
 ## Execution Steps
@@ -38,7 +31,7 @@ Parse `$ARGUMENTS`:
    - Normalize `effort`, `due`, `context` per the skill's rules for display, but do NOT coerce away values — show what is present.
 
 4. **Group and sort**:
-   - Group tasks under their domain (filename stem): `fulltime`, `parttime`, `side-projects`, `open-source`, `knowledge`.
+   - Group tasks under their domain (filename stem). Use the canonical list from `tasks/domains.md` for ordering domain sections; any domain not in the registry falls last.
    - Within each domain, sort by prio rank ascending (1 → 99). For equal rank, preserve file order (do NOT reorder beyond rank — this is a review, not a re-prioritization).
 
 5. **Emit the review** (read-only — no writes):

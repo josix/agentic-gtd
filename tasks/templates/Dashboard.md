@@ -1,12 +1,12 @@
 # Agentic GTD Dashboard
-
+%% 
 > **INTERACTIVE DASHBOARD** — Renders a GitHub-Projects-style Board + Table dashboard with in-place editing.
 > Open tasks are sourced live from `tasks/*.md` files; those files are the single source of truth.
-> **Edit capabilities**: (1) Resolve tasks as Done or Won't Fix via buttons on cards and rows; (2) Edit priority, due date, effort, and context inline in table rows; (3) Reprioritize via "Move ▸" selector on board cards. All writes go directly to the source `.md` file. Markdown stays the source of truth; resolve via buttons — never hard-delete a line.
+> **Edit capabilities**: (1) Resolve tasks as Done or Won't Fix via buttons on cards and rows; (2) Edit priority, due date, effort, and context inline in table rows; (3) Reprioritize via "Move ▸" selector on board cards; (4) Block/Unblock tasks; (5) Drag-and-drop or select tasks across Status Board columns (TODO → IN PROGRESS → DONE). All writes go directly to the source `.md` file. Markdown stays the source of truth; resolve via buttons — never hard-delete a line.
 >
 > **PREREQUISITE**: Dataview's **"Enable JavaScript Queries" (DataviewJS)** setting must be turned ON in Settings → Community plugins → Dataview for the controls to work.
 >
-> Layout: **Summary bar** (stat pills) → **Plan panels** (Today / This Week / Weekend, each showing its own latest plan note) → **Quick capture** → **Inbox** → **Board** (columns by priority tier, with Move + Resolve controls) → **Table** (grouped by domain, collapsible, with inline field editors + Resolve controls).
+> Layout: **Summary bar** (stat pills) → **Plan panels** (Today / This Week / Weekend, each showing its own latest plan note) → **Status Board** (TODO / IN PROGRESS / DONE columns, drag-and-drop) → **Quick capture** → **Inbox** → **Board** (columns by priority tier, with Move + Resolve controls) → **Table** (grouped by domain, collapsible, with inline field editors + Resolve controls). %%
 
 ```dataviewjs
 // ─── Section 1: Configuration ──────────────────────────────────────────────
@@ -23,6 +23,7 @@ const rankMap = {
 const DEFAULT_RANK = 99;
 
 // Domain display order (daily tiebreak: index is the tiebreak weight)
+// /add-domain appends new domains here; unknown domains fall back to default styling.
 const domainOrder = [
   "fulltime",
   "parttime",
@@ -55,6 +56,7 @@ const prioColors = {
 };
 
 // Domain hues
+// /add-domain appends new domains here; unknown domains fall back to default styling.
 const domainColors = {
   "fulltime":     { bg: "rgba(220,38,38,0.15)",   text: "#dc2626", border: "rgba(220,38,38,0.5)"   },
   "parttime":     { bg: "rgba(234,88,12,0.15)",   text: "#ea580c", border: "rgba(234,88,12,0.5)"   },
@@ -82,7 +84,9 @@ try {
   // ─── Section 2: Collect open tasks ──────────────────────────────────────
 
   // Accept tasks from domain files or any file under /tasks/; exclude inbox, templates, and plans.
-  const allTasks = dv.pages()
+  // .array() converts DataArray → plain Array so Array.prototype.sort(compareFn) works correctly
+  // (DataArray.sort uses a key-extractor signature, not a comparator; using it with compareTasks crashes).
+  const _allTasksRaw = dv.pages()
     .flatMap(p => p.file.tasks)
     .filter(t => {
       if (t.status !== " ") return false;
@@ -95,6 +99,27 @@ try {
       const inTasksDir = path.toLowerCase().includes("/tasks/");
       return inDomain || inTasksDir;
     });
+  const allTasks = typeof _allTasksRaw.array === "function" ? _allTasksRaw.array() : Array.from(_allTasksRaw);
+
+  // ─── Section 2b: Collect resolved-today tasks (for Status Board DONE column) ─
+  // Gathers tasks where checkbox is x or - AND resolved:<todayISO>.
+  // Minimal records: enough to render a board card.
+  const _resolvedTodayRawDV = dv.pages()
+    .flatMap(p => p.file.tasks)
+    .filter(t => {
+      if (t.status !== "x" && t.status !== "-") return false;
+      const path = t.path || "";
+      const stem = path.split("/").pop().replace(/\.md$/i, "").toLowerCase();
+      if (stem === "inbox") return false;
+      if (path.toLowerCase().includes("templates")) return false;
+      if (path.toLowerCase().includes("/plans/")) return false;
+      const inDomain = domainOrder.includes(stem);
+      const inTasksDir = path.toLowerCase().includes("/tasks/");
+      return inDomain || inTasksDir;
+    });
+  const resolvedTodayRaw = typeof _resolvedTodayRawDV.array === "function"
+    ? _resolvedTodayRawDV.array()
+    : Array.from(_resolvedTodayRawDV);
 
   // ─── Section 3: Metadata extraction helpers ──────────────────────────────
 
@@ -179,6 +204,10 @@ try {
     const recurs  = extract(text, /\brecurs:(\S+)/);
     const last    = extract(text, /\blast:(\d{4}-\d{2}-\d{2})/);
     const impact  = extract(text, /\bimpact:(\S+)/);
+    const blocked = /\bblocked:true\b/.test(text);
+    const status  = extract(text, /\bstatus:(\S+)/);
+    const _orderRaw = extract(text, /\border:(\d+)\b/);
+    const order   = _orderRaw ? parseInt(_orderRaw, 10) : null;
 
     const title = text
       .replace(/\b\w+:\S+/g, "")
@@ -209,29 +238,80 @@ try {
 
     return {
       title, domain, prio, rank, effort, effortMin,
-      due, effectiveDueISO, context, recurs, last, impact,
-      duEpoch, domainIdx, project,
+      due, effectiveDueISO, context, recurs, last, impact, blocked, status,
+      duEpoch, domainIdx, project, order,
       // Source location for writes (t.line is 0-based line index in Dataview)
       path: t.path,
       line: t.line,
     };
   });
 
+  // Build resolved-today records now that `today` and helpers are available.
+  const todayISOStr = today.toISODate();
+  const resolvedToday = resolvedTodayRaw
+    .filter(t => {
+      const text = t.text || "";
+      const resolvedDate = extract(text, /\bresolved:(\d{4}-\d{2}-\d{2})/);
+      return resolvedDate === todayISOStr;
+    })
+    .map(t => {
+      const text = t.text || "";
+      const prio       = extract(text, /\bprio:(\S+)/);
+      const resolution = extract(text, /\bresolution:(\S+)/);
+      const title      = text.replace(/\b\w+:\S+/g, "").replace(/\s{2,}/g, " ").trim();
+      const path       = t.path || "";
+      const domain     = path.split("/").pop().replace(/\.md$/i, "").toLowerCase();
+      const due        = extract(text, /\bdue:(\d{4}-\d{2}-\d{2})/);
+      const recurs     = extract(text, /\brecurs:(\S+)/);
+      const last       = extract(text, /\blast:(\d{4}-\d{2}-\d{2})/);
+      const blocked    = /\bblocked:true\b/.test(text);
+      const duEpoch    = effectiveDueEpoch(recurs, last, due);
+      let effectiveDueISO = due || "";
+      if (recurs && last) {
+        const interval = parseInterval(recurs);
+        if (interval) {
+          const lastDt = DateTime.fromISO(last);
+          if (lastDt.isValid) effectiveDueISO = lastDt.plus(interval).toISODate();
+        }
+      } else if (recurs && !last) {
+        effectiveDueISO = todayISOStr;
+      }
+      return { title, domain, prio, resolution, due, effectiveDueISO, recurs, last, blocked, duEpoch, path, line: t.line };
+    });
+
+  // ─── Section 4b: Recurring completions for DONE column ──────────────────
+  // Recurring tasks keep their [ ] checkbox when "done" — their last: is bumped to today.
+  // They never appear in resolvedTodayRaw (which requires [x]/[-]), but the user expects
+  // to see them in DONE after completing a cycle.  Source them from `records` directly.
+  const recurringCompletedToday = records
+    .filter(r => r.recurs && r.last === todayISOStr && r.status !== "in-progress")
+    .map(r => Object.assign({}, r, { resolution: "recurring" }));
+
   // ─── Section 5: Sort comparator (strict tiebreak per SKILL.md) ───────────
 
   function compareTasks(a, b) {
+    // Step 1: prio rank (strict, never overridden)
     if (a.rank !== b.rank) return a.rank - b.rank;
+    // Step 2: manual order ascending — tasks without order:N sort after ordered siblings
+    //         within the same rank; never crosses prio-rank boundaries.
+    const ao = (a.order == null) ? Infinity : a.order;
+    const bo = (b.order == null) ? Infinity : b.order;
+    if (ao !== bo) return ao - bo;
+    // Step 3: due-date proximity
     if (a.duEpoch !== b.duEpoch) {
       if (a.duEpoch === Infinity) return 1;
       if (b.duEpoch === Infinity) return -1;
       return a.duEpoch - b.duEpoch;
     }
+    // Step 4: effort ascending
     if (a.effortMin !== b.effortMin) {
       if (a.effortMin === Infinity) return 1;
       if (b.effortMin === Infinity) return -1;
       return a.effortMin - b.effortMin;
     }
+    // Step 5: domain order
     if (a.domainIdx !== b.domainIdx) return a.domainIdx - b.domainIdx;
+    // Step 6: alphabetical by title
     return a.title.toLowerCase().localeCompare(b.title.toLowerCase());
   }
 
@@ -281,6 +361,12 @@ try {
     }
     return pill(label + recurGlyph,
       { bg: "rgba(107,114,128,0.1)", text: "#6b7280", border: "rgba(107,114,128,0.3)" });
+  }
+
+  function blockedBadge(r) {
+    if (!r.blocked) return "";
+    return pill("🚫 Blocked",
+      { bg: "rgba(220,38,38,0.15)", text: "#dc2626", border: "rgba(220,38,38,0.5)" });
   }
 
   // ─── Section 7: Summary bar ──────────────────────────────────────────────
@@ -377,6 +463,7 @@ try {
     const last    = extract(text, /\blast:(\d{4}-\d{2}-\d{2})/);
     const effort  = extract(text, /\beffort:(\S+)/);
     const domain  = extract(text, /\bdomain:(\S+)/) || "";
+    const blocked = /\bblocked:true\b/.test(text);
     const title   = text.replace(/\b\w+:\S+/g, "").replace(/\s{2,}/g, " ").trim();
     const duEpoch = effectiveDueEpoch(recurs, last, due);
     let effectiveDueISO = due || "";
@@ -389,7 +476,7 @@ try {
     } else if (recurs && !last) {
       effectiveDueISO = today.toISODate();
     }
-    return { title, prio, due, context, recurs, last, effort, domain, duEpoch, effectiveDueISO };
+    return { title, prio, due, context, recurs, last, effort, domain, blocked, duEpoch, effectiveDueISO };
   }
 
   // Render a single plan task row into the given container.
@@ -423,6 +510,12 @@ try {
       const domainPill = document.createElement("span");
       domainPill.innerHTML = pill(rec.domain, dc);
       row.appendChild(domainPill);
+    }
+
+    if (rec.blocked) {
+      const blockedSpan = document.createElement("span");
+      blockedSpan.innerHTML = blockedBadge(rec);
+      row.appendChild(blockedSpan);
     }
 
     container.appendChild(row);
@@ -611,6 +704,390 @@ try {
     applyStyles(errMsg, { fontSize: "12px", color: "#dc2626", fontStyle: "italic", marginBottom: "20px" });
     errMsg.textContent = "Plan panel error: " + planErr.message;
     planSection.appendChild(errMsg);
+  }
+
+  // ─── Section 7c: Status Board — TODO / IN PROGRESS / DONE ───────────────
+  // TODO column: tasks scheduled in today's plan and not yet in-progress.
+  // IN PROGRESS column: open tasks with status:in-progress.
+  // DONE/WON'T FIX column: tasks resolved today.
+
+  // Module-scope drag payload (avoids DataTransfer serialization quirks).
+  let _dragPayload = null;
+
+  // Status write helpers.
+  async function setStatusInProgress(r) {
+    await rewriteLine(r.path, r.line, r.title, (line) => setField(line, "status", "in-progress"));
+  }
+
+  async function clearStatus(r) {
+    await rewriteLine(r.path, r.line, r.title, (line) => unsetField(line, "status"));
+  }
+
+  function rebuildView() {
+    try { app?.commands?.executeCommandById?.("dataview:dataview-rebuild-current-view"); } catch (_) {}
+  }
+
+  // Build a status-board card element.
+  function buildStatusCardEl(r, sourceCol) {
+    const dc = domainColors[r.domain] || prioColors._unknown;
+    const displayDomain = r.domain ? (r.domain.charAt(0).toUpperCase() + r.domain.slice(1)) : "—";
+    const pc = prioColors[r.prio] || prioColors._unknown;
+    const prioLabel = r.prio ? (prioLabels[r.prio] || r.prio) : null;
+
+    const card = document.createElement("div");
+    applyStyles(card, {
+      background: "var(--background-primary,#fff)",
+      border: "1px solid rgba(107,114,128,0.25)",
+      borderRadius: "8px",
+      padding: "10px 12px",
+      marginBottom: "8px",
+      boxShadow: "0 1px 3px rgba(0,0,0,0.06)",
+      cursor: sourceCol !== "done" ? "grab" : "default",
+    });
+
+    if (sourceCol !== "done") {
+      card.draggable = true;
+      card.addEventListener("dragstart", (e) => {
+        _dragPayload = { r, sourceCol };
+        card.style.opacity = "0.5";
+        if (e.dataTransfer) e.dataTransfer.effectAllowed = "move";
+      });
+      card.addEventListener("dragend", () => { card.style.opacity = "1"; });
+    }
+
+    // Resolution marker for DONE column.
+    if (sourceCol === "done") {
+      const marker = document.createElement("span");
+      if (r.resolution === "recurring") {
+        // Recurring cycle completed today — open [ ] with last: bumped to today.
+        marker.innerHTML = pill("♻ Recurring", { bg: "rgba(37,99,235,0.15)", text: "#2563eb", border: "rgba(37,99,235,0.5)" });
+        applyStyles(marker, { display: "block", marginBottom: "6px" });
+        card.appendChild(marker);
+        // Muted hint showing next cycle interval.
+        const hint = document.createElement("div");
+        applyStyles(hint, { fontSize: "10px", color: "#9ca3af", marginBottom: "4px" });
+        hint.textContent = "recurring — next cycle in " + r.recurs;
+        card.appendChild(hint);
+      } else {
+        const isDone = r.resolution === "done";
+        marker.innerHTML = isDone
+          ? pill("✓ Done", { bg: "rgba(22,163,74,0.15)", text: "#16a34a", border: "rgba(22,163,74,0.5)" })
+          : pill("✕ Won't Fix", { bg: "rgba(107,114,128,0.12)", text: "#6b7280", border: "rgba(107,114,128,0.4)" });
+        applyStyles(marker, { display: "block", marginBottom: "6px" });
+        card.appendChild(marker);
+      }
+    }
+
+    const titleEl = document.createElement("div");
+    applyStyles(titleEl, {
+      fontSize: "13px",
+      fontWeight: "500",
+      marginBottom: "6px",
+      lineHeight: "1.4",
+      wordBreak: "break-word",
+    });
+    titleEl.textContent = r.title;
+    card.appendChild(titleEl);
+
+    const metaRow = document.createElement("div");
+    applyStyles(metaRow, { display: "flex", flexWrap: "wrap", alignItems: "center", gap: "4px", marginBottom: sourceCol !== "done" ? "8px" : "0" });
+    let metaHtml = pill(displayDomain, dc);
+    if (prioLabel) metaHtml += pill(prioLabel, pc);
+    metaHtml += dueBadge(r);
+    if (r.blocked) metaHtml += blockedBadge(r);
+    metaRow.innerHTML = metaHtml;
+    card.appendChild(metaRow);
+
+    // Select fallback for TODO / IN PROGRESS cards.
+    if (sourceCol !== "done") {
+      const ctrlRow = document.createElement("div");
+      applyStyles(ctrlRow, { display: "flex", flexWrap: "wrap", alignItems: "center", gap: "5px", marginTop: "2px" });
+
+      const statusLabel = document.createElement("span");
+      applyStyles(statusLabel, { fontSize: "11px", color: "#9ca3af", whiteSpace: "nowrap" });
+      statusLabel.textContent = "Status ▸";
+      ctrlRow.appendChild(statusLabel);
+
+      const statusSelect = document.createElement("select");
+      applyStyles(statusSelect, {
+        fontSize: "11px",
+        padding: "1px 4px",
+        borderRadius: "4px",
+        border: "1px solid rgba(107,114,128,0.4)",
+        background: "var(--background-primary,#fff)",
+        color: "var(--text-normal,#374151)",
+        cursor: "pointer",
+      });
+      const statusOptions = [
+        { value: "", label: "—" },
+        { value: "todo", label: "To do" },
+        { value: "in-progress", label: "In progress" },
+        { value: "done", label: "Done" },
+        { value: "wont-fix", label: "Won't fix" },
+      ];
+      for (const opt of statusOptions) {
+        const o = document.createElement("option");
+        o.value = opt.value;
+        o.textContent = opt.label;
+        const curVal = sourceCol === "inprogress" ? "in-progress" : "";
+        if (opt.value === curVal) o.selected = true;
+        statusSelect.appendChild(o);
+      }
+      statusSelect.addEventListener("change", async (e) => {
+        const sel = e.target;
+        const chosen = sel.value;
+        if (chosen === "in-progress") {
+          await setStatusInProgress(r);
+        } else if (chosen === "todo") {
+          await clearStatus(r);
+        } else if (chosen === "done") {
+          const ok = await resolveTask(r, "done");
+          if (!ok) { sel.value = r.status || "todo"; return; }
+          if (r.recurs) new Notice("Recurring task: cycle completed — moved to DONE for today");
+          rebuildView();
+          return;
+        } else if (chosen === "wont-fix") {
+          const ok = await resolveTask(r, "wontfix");
+          if (!ok) { sel.value = r.status || "todo"; return; }
+          rebuildView();
+          return;
+        }
+        rebuildView();
+      });
+      ctrlRow.appendChild(statusSelect);
+      card.appendChild(ctrlRow);
+    }
+
+    return card;
+  }
+
+  // Build a droppable column element.
+  // `records` is an array of task records (not pre-built card elements).
+  // Cards are built internally so project sub-headers can be interleaved.
+  function buildStatusColEl(colId, label, color, records, placeholder) {
+    const col = document.createElement("div");
+    applyStyles(col, {
+      minWidth: "220px",
+      maxWidth: "340px",
+      flex: "1 1 220px",
+      background: "rgba(107,114,128,0.04)",
+      border: "1px solid rgba(107,114,128,0.15)",
+      borderRadius: "10px",
+      padding: "10px 10px 4px",
+      display: "flex",
+      flexDirection: "column",
+      transition: "background 0.15s",
+    });
+
+    const colHeader = document.createElement("div");
+    applyStyles(colHeader, {
+      display: "flex",
+      alignItems: "center",
+      justifyContent: "space-between",
+      marginBottom: "10px",
+      paddingBottom: "6px",
+      borderBottom: `2px solid ${color.border}`,
+    });
+    const colTitle = document.createElement("span");
+    applyStyles(colTitle, {
+      fontSize: "12px",
+      fontWeight: "700",
+      color: color.text,
+      textTransform: "uppercase",
+      letterSpacing: ".04em",
+    });
+    colTitle.textContent = label;
+    colHeader.appendChild(colTitle);
+
+    const colBadge = document.createElement("span");
+    applyStyles(colBadge, {
+      display: "inline-flex",
+      alignItems: "center",
+      justifyContent: "center",
+      minWidth: "20px",
+      height: "20px",
+      borderRadius: "9999px",
+      background: color.bg,
+      color: color.text,
+      fontSize: "11px",
+      fontWeight: "700",
+      border: `1px solid ${color.border}`,
+      padding: "0 4px",
+    });
+    colBadge.textContent = String(records.length);
+    colHeader.appendChild(colBadge);
+    col.appendChild(colHeader);
+
+    if (records.length === 0) {
+      const empty = document.createElement("div");
+      applyStyles(empty, { fontSize: "12px", color: "#9ca3af", fontStyle: "italic", padding: "8px 4px" });
+      empty.textContent = placeholder;
+      col.appendChild(empty);
+    } else {
+      // Cluster records by project; sub-header divs are flat siblings of cards
+      // so drop handlers (attached at column level) are unaffected.
+      const { flat: statusFlat, groups: statusGroups } = clusterByProject(records);
+      const showStatusSubHdrs = !(statusGroups.length === 1 && statusGroups[0].project === null);
+      for (const grp of statusGroups) {
+        if (showStatusSubHdrs) {
+          const subHdr = document.createElement("div");
+          applyStyles(subHdr, {
+            fontSize: "11px",
+            fontWeight: "700",
+            textTransform: "uppercase",
+            letterSpacing: ".03em",
+            color: "#6b7280",
+            marginTop: "6px",
+            marginBottom: "4px",
+            paddingBottom: "3px",
+            borderBottom: "1px solid rgba(107,114,128,0.2)",
+          });
+          subHdr.textContent = grp.project ? grp.project : "(no project)";
+          col.appendChild(subHdr);
+        }
+        for (let i = grp.start; i < grp.start + grp.count; i++) {
+          col.appendChild(buildStatusCardEl(statusFlat[i], colId));
+        }
+      }
+    }
+
+    // Drag-and-drop target (not for DONE column).
+    if (colId !== "done") {
+      col.addEventListener("dragover", (e) => {
+        if (!_dragPayload) return;
+        e.preventDefault();
+        if (e.dataTransfer) e.dataTransfer.dropEffect = "move";
+        col.style.background = "rgba(37,99,235,0.07)";
+        col.style.borderColor = "rgba(37,99,235,0.4)";
+      });
+      col.addEventListener("dragleave", () => {
+        col.style.background = "rgba(107,114,128,0.04)";
+        col.style.borderColor = "rgba(107,114,128,0.15)";
+      });
+      col.addEventListener("drop", async (e) => {
+        e.preventDefault();
+        col.style.background = "rgba(107,114,128,0.04)";
+        col.style.borderColor = "rgba(107,114,128,0.15)";
+        if (!_dragPayload) return;
+        const { r, sourceCol } = _dragPayload;
+        _dragPayload = null;
+        if (sourceCol === colId) return;
+        if (colId === "inprogress") {
+          await setStatusInProgress(r);
+          rebuildView();
+        } else if (colId === "todo") {
+          await clearStatus(r);
+          rebuildView();
+        }
+      });
+    } else {
+      // DONE column accepts drops.
+      col.addEventListener("dragover", (e) => {
+        if (!_dragPayload) return;
+        e.preventDefault();
+        if (e.dataTransfer) e.dataTransfer.dropEffect = "move";
+        col.style.background = "rgba(22,163,74,0.07)";
+        col.style.borderColor = "rgba(22,163,74,0.4)";
+      });
+      col.addEventListener("dragleave", () => {
+        col.style.background = "rgba(107,114,128,0.04)";
+        col.style.borderColor = "rgba(107,114,128,0.15)";
+      });
+      col.addEventListener("drop", async (e) => {
+        e.preventDefault();
+        col.style.background = "rgba(107,114,128,0.04)";
+        col.style.borderColor = "rgba(107,114,128,0.15)";
+        if (!_dragPayload) return;
+        const { r } = _dragPayload;
+        _dragPayload = null;
+        // Clear status first, then resolve. Mirrors resolveTask semantics.
+        await rewriteLine(r.path, r.line, r.title, (line) => {
+          let l = unsetField(line, "status");
+          if (r.recurs) {
+            // Recurring + DONE: bump last:, keep [ ], no resolution/resolved tags
+            new Notice("Recurring task: cycle completed — moved to DONE for today");
+            return setField(l, "last", todayISO());
+          }
+          l = setCheckbox(l, "x");
+          l = setField(l, "resolution", "done");
+          l = setField(l, "resolved", todayISO());
+          return l;
+        });
+        rebuildView();
+      });
+    }
+
+    return col;
+  }
+
+  // Partition open records for the status board.
+  const inProgressRecords = records.filter(r => r.status === "in-progress");
+  const todoRecords = records.filter(r => {
+    const key = (r.title || "").toLowerCase().trim();
+    if (!scheduledTitles.has(key)) return false;
+    if (r.status === "in-progress") return false;
+    // Exclude recurring tasks already completed this cycle (last: set to today)
+    if (r.recurs && r.last === todayISOStr) return false;
+    return true;
+  });
+
+  const statusBoardSection = dv.el("div", "");
+  try {
+  const statusBoardHeader = document.createElement("div");
+  applyStyles(statusBoardHeader, {
+    fontSize: "15px",
+    fontWeight: "700",
+    marginBottom: "12px",
+    paddingBottom: "4px",
+    borderBottom: "2px solid rgba(107,114,128,0.2)",
+  });
+  statusBoardHeader.textContent = "Status Board";
+  statusBoardSection.appendChild(statusBoardHeader);
+
+  const statusBoardRow = document.createElement("div");
+  applyStyles(statusBoardRow, {
+    display: "flex",
+    flexWrap: "wrap",
+    gap: "12px",
+    alignItems: "flex-start",
+    marginBottom: "24px",
+  });
+
+  statusBoardRow.appendChild(buildStatusColEl(
+    "todo",
+    "TODO",
+    { bg: "rgba(37,99,235,0.12)", text: "#2563eb", border: "rgba(37,99,235,0.4)" },
+    todoRecords,
+    "Nothing planned"
+  ));
+  statusBoardRow.appendChild(buildStatusColEl(
+    "inprogress",
+    "IN PROGRESS",
+    { bg: "rgba(245,158,11,0.12)", text: "#d97706", border: "rgba(245,158,11,0.4)" },
+    inProgressRecords,
+    "Drag a card here"
+  ));
+  // Combine standard resolved-today records with recurring cycle completions.
+  // recurringCompletedToday: open [ ] tasks with recurs: and last: == today (cycle done).
+  const doneRecords = [
+    ...resolvedToday,
+    ...recurringCompletedToday,
+  ];
+  statusBoardRow.appendChild(buildStatusColEl(
+    "done",
+    "DONE / WON'T FIX",
+    { bg: "rgba(22,163,74,0.12)", text: "#16a34a", border: "rgba(22,163,74,0.4)" },
+    doneRecords,
+    "Nothing resolved today"
+  ));
+
+  statusBoardSection.appendChild(statusBoardRow);
+  } catch (sbErr) {
+    // Status Board render error must not crash the rest of the dashboard.
+    const sbErrEl = document.createElement("div");
+    applyStyles(sbErrEl, { fontSize: "12px", color: "#9ca3af", fontStyle: "italic", marginBottom: "24px" });
+    sbErrEl.textContent = "Status Board unavailable: " + sbErr.message;
+    statusBoardSection.appendChild(sbErrEl);
   }
 
   // ─── Section 8a: Quick Capture form ─────────────────────────────────────
@@ -901,32 +1378,59 @@ try {
     }
   }
 
+  // ─── renumberGroup: dense order:N rewrite ───────────────────────────────
+  // Assigns order:1, 2, 3, … to every record in groupRecords (in the new
+  // visual sequence) by rewriting the order: token in each source line.
+  // Semantics:
+  //   • Rank-scoped: only records within the same prio rank are ever passed here.
+  //   • Dense: numbering starts at 1 with no gaps.
+  //   • Missing order (null) sorts as Infinity in compareTasks, i.e. after all
+  //     explicitly ordered siblings.
+  //   • Sequential writes (no Promise.all): concurrent app.vault.process calls
+  //     on the same file can race; we serialize to avoid corruption.
+  //   • One rebuildView() after the full loop.
+  async function renumberGroup(groupRecords) {
+    for (let i = 0; i < groupRecords.length; i++) {
+      const r = groupRecords[i];
+      await rewriteLine(r.path, r.line, r.title,
+        (line) => setField(line, "order", String(i + 1)));
+    }
+    rebuildView();
+  }
+
   // ─── Section 9: Resolve handler (Capability 1) ───────────────────────────
   // resolution: "done" | "wontfix"
   // Mirrors /clear-tasks semantics exactly.
 
   async function resolveTask(r, resolution) {
     const label = resolution === "done" ? "Done" : "Won't Fix";
-    if (!confirm(`Mark "${r.title}" as ${label}?`)) return;
+    if (!confirm(`Mark "${r.title}" as ${label}?`)) return false;
 
     await rewriteLine(r.path, r.line, r.title, (line) => {
+      let l = unsetField(line, "status");
       if (resolution === "done" && r.recurs) {
         // Recurring + DONE: bump last:, keep [ ], no resolution/resolved tags
-        return setField(line, "last", todayISO());
+        return setField(l, "last", todayISO());
       } else if (resolution === "done") {
         // Non-recurring DONE
-        let l = setCheckbox(line, "x");
+        l = setCheckbox(l, "x");
         l = setField(l, "resolution", "done");
         l = setField(l, "resolved", todayISO());
         return l;
       } else {
         // WON'T FIX (recurring or not)
-        let l = setCheckbox(line, "-");
+        l = setCheckbox(l, "-");
         l = setField(l, "resolution", "wontfix");
         l = setField(l, "resolved", todayISO());
         return l;
       }
     });
+    return true;
+  }
+
+  async function toggleBlocked(r) {
+    await rewriteLine(r.path, r.line, r.title, (line) =>
+      r.blocked ? unsetField(line, "blocked") : setField(line, "blocked", "true"));
   }
 
   // ─── Section 10: Shared button/control style helpers ─────────────────────
@@ -958,6 +1462,36 @@ try {
     return btn;
   }
 
+  // ─── clusterByProject ────────────────────────────────────────────────────
+  // Input: records already in comparator order (a column's array).
+  // Output: { flat: [...records in clustered order], groups: [{ project, start, count }] }
+  // Group key: r.project || null. Group order = first appearance while scanning
+  // (comparator order => best-ranked member positions the group). Within-group
+  // order preserved. No-project records collect into a single TRAILING bucket.
+  function clusterByProject(records) {
+    const order = [];
+    const buckets = new Map();
+    const NOPROJ = Symbol("noproject");
+    for (const r of records) {
+      const key = r.project ? r.project : NOPROJ;
+      if (!buckets.has(key)) { buckets.set(key, []); if (key !== NOPROJ) order.push(key); }
+      buckets.get(key).push(r);
+    }
+    const flat = [];
+    const groups = [];
+    for (const key of order) {
+      const arr = buckets.get(key);
+      groups.push({ project: key, start: flat.length, count: arr.length });
+      for (const r of arr) flat.push(r);
+    }
+    if (buckets.has(NOPROJ)) {
+      const arr = buckets.get(NOPROJ);
+      groups.push({ project: null, start: flat.length, count: arr.length });
+      for (const r of arr) flat.push(r);
+    }
+    return { flat, groups };
+  }
+
   // ─── Section 11: Board — grouped by priority tier ────────────────────────
   // One column per priority that has ≥1 task, in rank order, with an
   // "Unprioritized" trailing column for rank-99 tasks.
@@ -976,13 +1510,16 @@ try {
   const colHeaderColor = Object.assign({}, prioColors);
   colHeaderColor._unknown = prioColors._unknown;
 
+  // Module-scope drag payload for Board reorder (separate from Status Board _dragPayload).
+  let _reorderPayload = null;
+
   // Build a board card as a DOM element (needed for interactive controls).
   function buildCardEl(r) {
     const dc = domainColors[r.domain] || prioColors._unknown;
     const displayDomain = r.domain ? (r.domain.charAt(0).toUpperCase() + r.domain.slice(1)) : "—";
     const effortLabel = r.effort || "—";
 
-    // Card wrapper
+    // Card wrapper — draggable for within-column reorder
     const card = document.createElement("div");
     applyStyles(card, {
       background: "var(--background-primary,#fff)",
@@ -991,6 +1528,45 @@ try {
       padding: "10px 12px",
       marginBottom: "8px",
       boxShadow: "0 1px 3px rgba(0,0,0,0.06)",
+      cursor: "grab",
+      position: "relative",
+    });
+    card.draggable = true;
+    card.dataset.prio = r.prio || "_unknown";
+
+    card.addEventListener("dragstart", (e) => {
+      _reorderPayload = { r };
+      card.style.opacity = "0.5";
+      if (e.dataTransfer) e.dataTransfer.effectAllowed = "move";
+    });
+    card.addEventListener("dragend", () => {
+      card.style.opacity = "1";
+      card.style.borderTop = "";
+      card.style.borderBottom = "";
+      _reorderPayload = null;
+    });
+    // Card-level dragover: show insertion indicator above/below this card
+    card.addEventListener("dragover", (e) => {
+      if (!_reorderPayload) return;
+      const src = _reorderPayload.r;
+      // Reject cross-column drags
+      const srcPrio = src.prio || "_unknown";
+      const tgtPrio = card.dataset.prio;
+      if (srcPrio !== tgtPrio) return;
+      e.preventDefault();
+      e.stopPropagation();
+      if (e.dataTransfer) e.dataTransfer.dropEffect = "move";
+      const rect = card.getBoundingClientRect();
+      const mid = rect.top + rect.height / 2;
+      const isBefore = e.clientY < mid;
+      card.style.borderTop = isBefore ? "2px solid rgba(37,99,235,0.7)" : "";
+      card.style.borderBottom = isBefore ? "" : "2px solid rgba(37,99,235,0.7)";
+      card.dataset.dropPosition = isBefore ? "before" : "after";
+    });
+    card.addEventListener("dragleave", () => {
+      card.style.borderTop = "";
+      card.style.borderBottom = "";
+      delete card.dataset.dropPosition;
     });
 
     // Title
@@ -1018,12 +1594,14 @@ try {
       pill(displayDomain, dc) +
       dueBadge(r) +
       `<span style="font-size:11px;color:#9ca3af;padding:1px 5px;">${esc(effortLabel)}</span>` +
-      (r.context ? `<span style="font-size:10px;color:#9ca3af;margin-left:4px;">${esc(r.context)}</span>` : "");
+      (r.context ? `<span style="font-size:10px;color:#9ca3af;margin-left:4px;">${esc(r.context)}</span>` : "") +
+      (r.project ? pill(r.project, { bg: "rgba(107,114,128,0.1)", text: "#6b7280", border: "rgba(107,114,128,0.3)" }) : "");
     const _sched = scheduledTitles.get((r.title || "").toLowerCase().trim());
     if (_sched) {
       metaRow.innerHTML += pill("📅 " + _sched,
         { bg: "rgba(37,99,235,0.15)", text: "#2563eb", border: "rgba(37,99,235,0.5)" });
     }
+    metaRow.innerHTML += blockedBadge(r);
     card.appendChild(metaRow);
 
     // Controls row: Move ▸ select + Done button + Won't Fix button
@@ -1080,6 +1658,13 @@ try {
       () => resolveTask(r, "wontfix")
     );
     ctrlRow.appendChild(wontBtn);
+
+    const blockBtn = makeBtn(
+      r.blocked ? "🚫 Unblock" : "🚫 Block",
+      "rgba(220,38,38,0.1)", "#dc2626", "rgba(220,38,38,0.5)",
+      () => toggleBlocked(r)
+    );
+    ctrlRow.appendChild(blockBtn);
 
     card.appendChild(ctrlRow);
     return card;
@@ -1169,9 +1754,86 @@ try {
 
     col.appendChild(colHeader);
 
-    for (const r of tasks) {
-      col.appendChild(buildCardEl(r));
+    // Cluster cards by project; sub-headers are flat siblings of cards (no wrapper divs)
+    // so the drop handler's col.children filter on dataset.prio still works correctly.
+    const { flat, groups } = clusterByProject(tasks);
+    const showSubHeaders = !(groups.length === 1 && groups[0].project === null);
+    for (const grp of groups) {
+      if (showSubHeaders) {
+        const subHdr = document.createElement("div");
+        applyStyles(subHdr, {
+          fontSize: "11px",
+          fontWeight: "700",
+          textTransform: "uppercase",
+          letterSpacing: ".03em",
+          color: "#6b7280",
+          marginTop: "6px",
+          marginBottom: "4px",
+          paddingBottom: "3px",
+          borderBottom: "1px solid rgba(107,114,128,0.2)",
+        });
+        subHdr.textContent = grp.project ? grp.project : "(no project)";
+        col.appendChild(subHdr);
+      }
+      for (let i = grp.start; i < grp.start + grp.count; i++) {
+        col.appendChild(buildCardEl(flat[i]));
+      }
     }
+
+    // Column-level dragover/dragleave/drop for Board reorder.
+    // Drop is only valid within the same prio column.
+    col.addEventListener("dragover", (e) => {
+      if (!_reorderPayload) return;
+      const srcPrio = _reorderPayload.r.prio || "_unknown";
+      if (srcPrio !== key) return;  // cross-column: reject
+      e.preventDefault();
+      if (e.dataTransfer) e.dataTransfer.dropEffect = "move";
+      col.style.background = "rgba(37,99,235,0.04)";
+    });
+    col.addEventListener("dragleave", (e) => {
+      // Only reset if leaving the column (not entering a child card)
+      if (!col.contains(e.relatedTarget)) {
+        col.style.background = "rgba(107,114,128,0.04)";
+      }
+    });
+    col.addEventListener("drop", async (e) => {
+      e.preventDefault();
+      col.style.background = "rgba(107,114,128,0.04)";
+      if (!_reorderPayload) return;
+      const { r: srcRecord } = _reorderPayload;
+      _reorderPayload = null;
+
+      // Reject cross-column drops
+      if ((srcRecord.prio || "_unknown") !== key) return;
+
+      // Find which card the pointer was over when drop fired
+      // and compute the new sequence from the column's current card list.
+      const allCardEls = Array.from(col.children).filter(el => el.dataset && el.dataset.prio);
+      // Determine drop index based on dropPosition markers left by card dragover
+      let dropIdx = allCardEls.length;  // default: end of column
+      for (let i = 0; i < allCardEls.length; i++) {
+        const pos = allCardEls[i].dataset.dropPosition;
+        if (pos === "before") { dropIdx = i; break; }
+        if (pos === "after")  { dropIdx = i + 1; break; }
+      }
+      // Clear all dropPosition markers
+      for (const el of allCardEls) { delete el.dataset.dropPosition; el.style.borderTop = ""; el.style.borderBottom = ""; }
+
+      // dropIdx is a position in the rendered (clustered) card list, so colRecords must
+      // be the same flat clustered array; cross-project drops renumber but snap back into
+      // their own project group on rebuild (clustering wins for display; order persists
+      // within a group).
+      const colRecords = flat.slice(); // use the same clustered sequence as the DOM
+      const srcIdx = colRecords.findIndex(r2 => r2.path === srcRecord.path && r2.line === srcRecord.line);
+      if (srcIdx === -1) return;
+      // Remove src from current position
+      colRecords.splice(srcIdx, 1);
+      // Clamp dropIdx after removal
+      const insertAt = dropIdx > srcIdx ? dropIdx - 1 : dropIdx;
+      colRecords.splice(Math.min(insertAt, colRecords.length), 0, srcRecord);
+
+      await renumberGroup(colRecords);
+    });
 
     boardRow.appendChild(col);
   }
@@ -1194,12 +1856,61 @@ try {
   tableHeaderEl.textContent = "All tasks · grouped by Domain";
   tableSection.appendChild(tableHeaderEl);
 
+  // Module-scope drag payload for Table reorder.
+  let _tableReorderPayload = null;
+
   // Build a table row as a DOM element (needed for interactive editors).
   function buildTableRowEl(r) {
     const pc = prioColors[r.prio] || prioColors._unknown;
 
     const tr = document.createElement("tr");
     applyStyles(tr, { borderBottom: "1px solid rgba(107,114,128,0.12)" });
+
+    // ── Drag handle cell ──
+    const dragHandleCel = document.createElement("td");
+    applyStyles(dragHandleCel, {
+      padding: "4px 6px",
+      color: "#9ca3af",
+      fontSize: "12px",
+      cursor: "grab",
+      userSelect: "none",
+      whiteSpace: "nowrap",
+    });
+    dragHandleCel.textContent = "⠿";
+    dragHandleCel.title = "Drag to reorder within same priority and domain";
+    tr.appendChild(dragHandleCel);
+
+    // Row drag: only valid within the same domain and same rank run
+    tr.draggable = true;
+    tr.dataset.domain = r.domain;
+    tr.dataset.rank = String(r.rank);
+    tr.addEventListener("dragstart", (e) => {
+      _tableReorderPayload = { r };
+      tr.style.opacity = "0.5";
+      if (e.dataTransfer) e.dataTransfer.effectAllowed = "move";
+    });
+    tr.addEventListener("dragend", () => {
+      tr.style.opacity = "1";
+      tr.style.outline = "";
+      _tableReorderPayload = null;
+    });
+    tr.addEventListener("dragover", (e) => {
+      if (!_tableReorderPayload) return;
+      const src = _tableReorderPayload.r;
+      // Reject if different domain or different rank
+      if (src.domain !== r.domain || src.rank !== r.rank) return;
+      e.preventDefault();
+      e.stopPropagation();
+      if (e.dataTransfer) e.dataTransfer.dropEffect = "move";
+      const rect = tr.getBoundingClientRect();
+      const mid = rect.top + rect.height / 2;
+      tr.style.outline = "2px solid rgba(37,99,235,0.7)";
+      tr.dataset.dropPosition = e.clientY < mid ? "before" : "after";
+    });
+    tr.addEventListener("dragleave", () => {
+      tr.style.outline = "";
+      delete tr.dataset.dropPosition;
+    });
 
     // ── Priority cell: select for inline reprioritize ──
     const prioCel = document.createElement("td");
@@ -1234,7 +1945,15 @@ try {
     // ── Task title cell ──
     const titleCel = document.createElement("td");
     applyStyles(titleCel, { padding: "4px 8px", fontSize: "13px" });
-    titleCel.textContent = r.title;
+    const titleText = document.createElement("span");
+    titleText.textContent = r.title;
+    titleCel.appendChild(titleText);
+    if (r.blocked) {
+      const blockedSpan = document.createElement("span");
+      blockedSpan.style.marginLeft = "6px";
+      blockedSpan.innerHTML = blockedBadge(r);
+      titleCel.appendChild(blockedSpan);
+    }
     tr.appendChild(titleCel);
 
     // ── Project cell (read-only pill) ──
@@ -1359,6 +2078,19 @@ try {
     wontBtn.title = "Won't Fix";
     resolveCel.appendChild(wontBtn);
 
+    const blockSpacer = document.createElement("span");
+    blockSpacer.style.display = "inline-block";
+    blockSpacer.style.width = "4px";
+    resolveCel.appendChild(blockSpacer);
+
+    const blockToggleBtn = makeBtn(
+      "🚫",
+      "rgba(220,38,38,0.1)", "#dc2626", "rgba(220,38,38,0.5)",
+      () => toggleBlocked(r)
+    );
+    blockToggleBtn.title = r.blocked ? "Unblock" : "Mark Blocked";
+    resolveCel.appendChild(blockToggleBtn);
+
     tr.appendChild(resolveCel);
 
     return tr;
@@ -1366,6 +2098,7 @@ try {
 
   const tableHeaderRowHtml =
     `<tr style="border-bottom:2px solid rgba(107,114,128,0.25);">` +
+      `<th style="padding:6px 4px;width:18px;"></th>` +
       `<th style="padding:6px 8px;font-size:11px;text-transform:uppercase;` +
         `letter-spacing:.05em;color:#9ca3af;font-weight:600;white-space:nowrap;">Priority</th>` +
       `<th style="padding:6px 8px;font-size:11px;text-transform:uppercase;` +
@@ -1427,10 +2160,98 @@ try {
     thead.innerHTML = tableHeaderRowHtml;
     table.appendChild(thead);
 
+    // Cluster the domain's tasks by project; render sub-header rows interleaved
+    // with data rows so the visual order matches the clustered flat array.
+    const { flat: domainFlat, groups: domainGroups } = clusterByProject(domainTasks);
+    const showTableSubHdrs = !(domainGroups.length === 1 && domainGroups[0].project === null);
+    // colspan = 8: drag-handle + Priority + Task + Project + Due + Effort + Context + Actions
+    const TABLE_COLSPAN = 8;
+
     const tbody = document.createElement("tbody");
-    for (const r of domainTasks) {
-      tbody.appendChild(buildTableRowEl(r));
+    for (const grp of domainGroups) {
+      if (showTableSubHdrs) {
+        const subHdrTr = document.createElement("tr");
+        const subHdrTd = document.createElement("td");
+        subHdrTd.colSpan = TABLE_COLSPAN;
+        applyStyles(subHdrTd, {
+          fontSize: "11px",
+          fontWeight: "700",
+          textTransform: "uppercase",
+          letterSpacing: ".03em",
+          color: "#6b7280",
+          padding: "8px 8px 3px",
+          borderBottom: "1px solid rgba(107,114,128,0.2)",
+        });
+        subHdrTd.textContent = grp.project ? grp.project : "(no project)";
+        subHdrTr.appendChild(subHdrTd);
+        tbody.appendChild(subHdrTr);
+      }
+      for (let i = grp.start; i < grp.start + grp.count; i++) {
+        tbody.appendChild(buildTableRowEl(domainFlat[i]));
+      }
     }
+
+    // tbody drop handler: reorder within same domain AND same rank run.
+    // Same-rank sequence is derived from domainFlat (clustered order) so that
+    // renumbered order:N values follow the visual top-to-bottom clustered order.
+    // Sub-header <tr>s have no dataset.rank so they are skipped by all rank-keyed filters.
+    tbody.addEventListener("dragover", (e) => {
+      if (!_tableReorderPayload) return;
+      e.preventDefault();
+      if (e.dataTransfer) e.dataTransfer.dropEffect = "move";
+    });
+    tbody.addEventListener("drop", async (e) => {
+      e.preventDefault();
+      if (!_tableReorderPayload) return;
+      const { r: srcRecord } = _tableReorderPayload;
+      _tableReorderPayload = null;
+
+      // Reject cross-domain drops
+      if (srcRecord.domain !== domain) return;
+
+      // Find the target row and its dropPosition marker
+      const allRowEls = Array.from(tbody.children);
+      let dropIdx = allRowEls.length;
+      for (let i = 0; i < allRowEls.length; i++) {
+        const pos = allRowEls[i].dataset.dropPosition;
+        if (pos === "before") { dropIdx = i; break; }
+        if (pos === "after")  { dropIdx = i + 1; break; }
+      }
+      for (const el of allRowEls) { delete el.dataset.dropPosition; el.style.outline = ""; }
+
+      // Same-rank records in clustered visual order (sub-header rows skipped
+      // because they have no dataset.rank).
+      // domainFlat is the flat clustered order; filter to same rank preserves
+      // that visual top-to-bottom sequence across project groups.
+      const sameRankRecords = domainFlat.filter(r => r.rank === srcRecord.rank);
+      // Cross-rank drop: reject
+      const allSameRankPaths = new Set(sameRankRecords.map(r2 => r2.path + ":" + r2.line));
+      const srcKey = srcRecord.path + ":" + srcRecord.line;
+      if (!allSameRankPaths.has(srcKey)) return;
+
+      // Compute the insertion index within the same-rank run.
+      // allRowEls now contains both data rows and sub-header rows.
+      // sameRankEls filters to data rows of the correct rank; sub-headers are skipped.
+      const sameRankEls = allRowEls.filter(el =>
+        el.dataset && el.dataset.rank === String(srcRecord.rank));
+      let rankDropIdx = sameRankEls.length;
+      for (let i = 0; i < sameRankEls.length; i++) {
+        const domainIdx = allRowEls.indexOf(sameRankEls[i]);
+        if (domainIdx >= dropIdx) { rankDropIdx = i; break; }
+      }
+
+      const srcRankIdx = sameRankRecords.findIndex(
+        r2 => r2.path === srcRecord.path && r2.line === srcRecord.line);
+      if (srcRankIdx === -1) return;
+
+      const newSeq = sameRankRecords.slice();
+      newSeq.splice(srcRankIdx, 1);
+      const insertAt = rankDropIdx > srcRankIdx ? rankDropIdx - 1 : rankDropIdx;
+      newSeq.splice(Math.min(insertAt, newSeq.length), 0, srcRecord);
+
+      await renumberGroup(newSeq);
+    });
+
     table.appendChild(tbody);
 
     tableWrapper.appendChild(table);
