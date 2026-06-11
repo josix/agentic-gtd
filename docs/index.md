@@ -81,7 +81,7 @@ flowchart LR
 
 ### Reference
 
-- [Commands](reference/commands.md) - All ten commands at a glance
+- [Commands](reference/commands.md) - All eleven commands at a glance
 - [Skills](reference/skills.md) - The two plugin skills
 - [Triage Agent](reference/triage-agent.md) - Triage agent specification
 - [FAQ](reference/faq.md) - Missing tags and common questions

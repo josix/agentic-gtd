@@ -1,6 +1,6 @@
 # Commands
 
-Complete index of all ten `agentic-gtd` commands.
+Complete index of all eleven `agentic-gtd` commands.
 
 ## Overview
 
@@ -14,6 +14,7 @@ Each command is a slash-command loaded from its source file in `commands/`. The 
 | `/add-task` | Append a new well-formed task line to a domain file | [`../../commands/add-task.md`](../../commands/add-task.md) |
 | `/clear-tasks` | Mark completed or abandoned tasks as resolved and archive them | [`../../commands/clear-tasks.md`](../../commands/clear-tasks.md) |
 | `/layout` | Render a structured view of all tasks across domains | [`../../commands/layout.md`](../../commands/layout.md) |
+| `/log-day` | Log what you did today; reconcile with open tasks and capture new work | [`../../commands/log-day.md`](../../commands/log-day.md) |
 | `/plan-day` | Build a ranked, filtered daily plan from open tasks | [`../../commands/plan-day.md`](../../commands/plan-day.md) |
 | `/plan-week` | Build a 7-day rolling plan bucketed by due date | [`../../commands/plan-week.md`](../../commands/plan-week.md) |
 | `/plan-weekend` | Run a GTD Weekly Review sweep and build a weekend plan | [`../../commands/plan-weekend.md`](../../commands/plan-weekend.md) |
