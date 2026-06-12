@@ -69,8 +69,8 @@ A task carrying a `recurs:` tag is a **standing review**, not a one-shot next-ac
 |------------|------|
 | fulltime   | 1    |
 | parttime   | 2    |
-| side       | 3    |
-| trust      | 4    |
+| trust      | 3    |
+| side       | 4    |
 | long       | 5    |
 | short      | 6    |
 | tedious    | 7    |

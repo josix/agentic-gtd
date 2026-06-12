@@ -14,8 +14,8 @@
 const rankMap = {
   fulltime: 1,
   parttime: 2,
-  side:     3,
-  trust:    4,
+  trust:    3,
+  side:     4,
   long:     5,
   short:    6,
   tedious:  7,
@@ -67,17 +67,18 @@ const domainColors = {
 
 try {
   // ── Midnight rollover: clear any stale timer/listener from a prior block run ──
+  // Refs MUST live on window: dv.container is recreated on every render, so refs
+  // stored there are unreachable by the next render and can never be cleaned up
+  // (the old dv.container-based cleanup here was dead code for that reason).
   try {
-    if (dv.container) {
-      if (dv.container.__ggtdMidnightTimer) {
-        clearTimeout(dv.container.__ggtdMidnightTimer);
-        dv.container.__ggtdMidnightTimer = null;
-      }
-      if (dv.container.__ggtdDayWatch) {
-        document.removeEventListener("visibilitychange", dv.container.__ggtdDayWatch);
-        window.removeEventListener("focus", dv.container.__ggtdDayWatch);
-        dv.container.__ggtdDayWatch = null;
-      }
+    if (window.__ggtdMidnightTimer) {
+      clearTimeout(window.__ggtdMidnightTimer);
+      window.__ggtdMidnightTimer = null;
+    }
+    if (window.__ggtdDayWatch) {
+      document.removeEventListener("visibilitychange", window.__ggtdDayWatch);
+      window.removeEventListener("focus", window.__ggtdDayWatch);
+      window.__ggtdDayWatch = null;
     }
   } catch (_) {}
 
@@ -630,7 +631,7 @@ try {
     if (cfg.mode === "weekend") {
       todayLabel.textContent = "Weekend Plan";
     } else if (cfg.mode === "week") {
-      todayLabel.textContent = "Week of " + (planDt.isValid ? planDt.toFormat("MMM dd") : planDateISO(planPage));
+      todayLabel.textContent = "Week of " + (planDt.isValid ? planDt.startOf("week").toFormat("MMM dd") : planDateISO(planPage));
     } else {
       todayLabel.textContent = planDt.isValid ? planDt.toFormat("EEE MMM dd") : planDateISO(planPage);
     }
@@ -1496,7 +1497,7 @@ try {
   // One column per priority that has ≥1 task, in rank order, with an
   // "Unprioritized" trailing column for rank-99 tasks.
 
-  const prioTierOrder = ["fulltime","parttime","side","trust","long","short","tedious"];
+  const prioTierOrder = ["fulltime","parttime","trust","side","long","short","tedious"];
 
   // Group records into columns.
   const columnMap = {};
@@ -2268,25 +2269,42 @@ try {
       try { app?.commands?.executeCommandById?.("dataview:dataview-rebuild-current-view"); } catch (_) {}
     };
     // (1) one-shot timer to ~2s after the next local midnight; the rebuild re-runs
-    //     this block, which re-arms the next day's timer.
+    //     this block, which re-arms the next day's timer. The handle MUST live on
+    //     window — dv.container is destroyed on every re-render, so a handle stored
+    //     there can never be cleared and stale timers stack up across renders.
     if (typeof setTimeout === "function" && dv.container) {
+      if (window.__ggtdMidnightTimer) clearTimeout(window.__ggtdMidnightTimer);
       const msToMidnight = Math.max(
         today.plus({ days: 1 }).toMillis() - DateTime.now().toMillis() + 2000,
         1000
       );
-      dv.container.__ggtdMidnightTimer = setTimeout(ggtdRebuild, msToMidnight);
+      window.__ggtdMidnightTimer = setTimeout(ggtdRebuild, msToMidnight);
     }
     // (2) focus/visibility re-check: rebuild only if the day actually changed since
-    //     this render (cheap; avoids needless rebuilds on every focus).
+    //     this render (cheap; avoids needless rebuilds on every focus). Detach the
+    //     previous render's handler first: listeners attach to document/window and
+    //     survive re-renders, and a stale handler's captured renderedDayMs goes
+    //     permanently out of date after midnight — every focus would then trigger
+    //     a rebuild loop that makes the dashboard appear to close/reset itself.
     if (dv.container && typeof document !== "undefined") {
+      if (window.__ggtdDayWatch) {
+        document.removeEventListener("visibilitychange", window.__ggtdDayWatch);
+        window.removeEventListener("focus", window.__ggtdDayWatch);
+      }
       const renderedDayMs = todayMs;
       const ggtdDayWatch = () => {
         try {
           if (document.visibilityState && document.visibilityState !== "visible") return;
-          if (DateTime.now().startOf("day").toMillis() !== renderedDayMs) ggtdRebuild();
+          const nowDayMs = DateTime.now().startOf("day").toMillis();
+          if (nowDayMs === renderedDayMs) return;
+          // Latch: at most one rebuild per actual day change, even when focus and
+          // visibilitychange fire together (e.g. switching macOS full-screen Spaces).
+          if (window.__ggtdLastRebuildDayMs === nowDayMs) return;
+          window.__ggtdLastRebuildDayMs = nowDayMs;
+          ggtdRebuild();
         } catch (_) {}
       };
-      dv.container.__ggtdDayWatch = ggtdDayWatch;
+      window.__ggtdDayWatch = ggtdDayWatch;
       document.addEventListener("visibilitychange", ggtdDayWatch);
       window.addEventListener("focus", ggtdDayWatch);
     }

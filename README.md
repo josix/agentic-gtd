@@ -12,6 +12,7 @@ A Claude Code plugin that ingests tasks from local markdown files across configu
 - Build a **7-day rolling plan** bucketed by due date (`/plan-week`)
 - Run a **GTD Weekly Review** and generate a **weekend plan** with reversed domain weighting (`/plan-weekend`)
 - **Capture** new tasks with well-formed metadata (`/add-task`, `/triage-inbox`)
+- **Close the daily loop** by logging what you did in free text, reconciling it with open tasks, and capturing unlisted work (`/log-day`)
 - **One-way sync** tasks into a private GitHub Project for visibility (`/sync-github`)
 
 ---
@@ -40,6 +41,7 @@ Domains are an extensible registry in `tasks/domains.md`; `/add-domain` register
 | `/add-task` | Append a new well-formed task to a domain file | [Capturing Tasks](docs/guides/capturing-tasks.md) |
 | `/clear-tasks` | Mark completed or abandoned tasks as resolved | [Commands](docs/reference/commands.md) |
 | `/layout` | Render a structured view of all tasks across domains | [Commands](docs/reference/commands.md) |
+| `/log-day` | Log your day in free text; reconcile with open tasks and capture new work | [Commands](docs/reference/commands.md) |
 | `/plan-day` | Build a ranked, filtered daily plan | [Using /plan-day](docs/guides/using-plan-day.md) |
 | `/plan-week` | Build a 7-day rolling plan bucketed by due date | [Using /plan-week](docs/guides/using-plan-week.md) |
 | `/plan-weekend` | GTD Weekly Review sweep + weekend plan | [Using /plan-weekend](docs/guides/using-plan-weekend.md) |
@@ -81,7 +83,7 @@ See [Installation](docs/getting-started/installation.md) for full setup instruct
 - [Obsidian Dashboard](docs/guides/obsidian-dashboard.md) — interactive board, inline editing, MCP
 
 ### Reference
-- [Commands](docs/reference/commands.md) — all ten commands at a glance
+- [Commands](docs/reference/commands.md) — all eleven commands at a glance
 - [Skills](docs/reference/skills.md) — the two plugin skills (gtd-prioritization, github-sync)
 - [Triage Agent](docs/reference/triage-agent.md) — Triage agent specification
 - [FAQ](docs/reference/faq.md) — missing tags and common questions

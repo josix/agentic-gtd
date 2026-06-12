@@ -18,7 +18,7 @@ description: This skill should be used when syncing local tasks/*.md into a GitH
 | Markdown source              | GitHub Project field      | Field type      | Values / notes                                    |
 |------------------------------|---------------------------|-----------------|---------------------------------------------------|
 | filename stem                | `Domain`                  | single-select   | `fulltime`, `side-projects`, `open-source`, `knowledge` |
-| `prio:` tag                  | `Priority`                | single-select   | `fulltime`, `side`, `trust`, `long`, `short`, `tedious` |
+| `prio:` tag                  | `Priority`                | single-select   | `fulltime`, `trust`, `side`, `long`, `short`, `tedious` |
 | `due:` tag                   | `Due`                     | date            | ISO `YYYY-MM-DD`; empty if absent/malformed       |
 | checkbox state `[ ]` / `[x]`| `Status`                  | single-select   | `Todo` (space) / `Done` (x)                       |
 | task title (before first tag)| item title                | built-in title  | trimmed, internal whitespace collapsed            |
@@ -117,7 +117,7 @@ Invoke GraphQL via: `gh api graphql -f query='<mutation>'`
 3. **Create project**: run `gh project create --owner @me --title "Agentic GTD"` (private by default). Capture the project number and node ID from output.
 
 4. **Create custom fields** via GraphQL `createProjectV2Field` mutation:
-   - `Priority` — single-select, options in ladder order: `fulltime`, `side`, `trust`, `long`, `short`, `tedious`
+   - `Priority` — single-select, options in ladder order: `fulltime`, `trust`, `side`, `long`, `short`, `tedious`
    - `Domain` — single-select, options: `fulltime`, `side-projects`, `open-source`, `knowledge`
    - `Due` — date field
    - `Project/Area` — text field
