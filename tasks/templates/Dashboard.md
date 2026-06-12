@@ -788,6 +788,7 @@ try {
       wordBreak: "break-word",
     });
     titleEl.textContent = r.title;
+    titleEl.appendChild(makeOpenSourceBtn(r));
     card.appendChild(titleEl);
 
     const metaRow = document.createElement("div");
@@ -1463,6 +1464,28 @@ try {
     return btn;
   }
 
+  // Opens the task's source .md file in a new Obsidian tab (native editor persists edits to disk).
+  // r.path is vault-relative (from t.path); openLinkText resolves it against the vault.
+  function makeOpenSourceBtn(r) {
+    const btn = makeBtn(
+      "🔗",
+      "rgba(37,99,235,0.1)", "#2563eb", "rgba(37,99,235,0.4)",
+      (e) => {
+        if (e && e.stopPropagation) e.stopPropagation();
+        try {
+          app.workspace.openLinkText(r.path, "", true, { eState: { line: r.line } });
+        } catch (err) {
+          new Notice("Could not open source file: " + (err && err.message ? err.message : err));
+        }
+      }
+    );
+    btn.title = "Open source file in new tab";
+    btn.style.cursor = "pointer";
+    btn.style.marginLeft = "6px";
+    btn.style.fontSize = "10px";
+    return btn;
+  }
+
   // ─── clusterByProject ────────────────────────────────────────────────────
   // Input: records already in comparator order (a column's array).
   // Output: { flat: [...records in clustered order], groups: [{ project, start, count }] }
@@ -1580,6 +1603,7 @@ try {
       wordBreak: "break-word",
     });
     titleEl.textContent = r.title;
+    titleEl.appendChild(makeOpenSourceBtn(r));
     card.appendChild(titleEl);
 
     // Meta row: domain pill + due badge + effort + context
@@ -1949,6 +1973,7 @@ try {
     const titleText = document.createElement("span");
     titleText.textContent = r.title;
     titleCel.appendChild(titleText);
+    titleCel.appendChild(makeOpenSourceBtn(r));
     if (r.blocked) {
       const blockedSpan = document.createElement("span");
       blockedSpan.style.marginLeft = "6px";
