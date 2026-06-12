@@ -32,7 +32,7 @@ Example:
 
    **b. Rank tasks using weekend domain weighting**:
    - Domain tie-break order for weekend is driven by the `weekend_order` column in `tasks/domains.md`. Default order (lower = higher priority): `side-projects`(1) < `open-source`(2) < `knowledge`(3) < `parttime`(4) < `fulltime`(5).
-   - Primary ranking is still by prio rank ascending (1=fulltime, 2=parttime, 3=side, … 7=tedious, 99=missing).
+   - Primary ranking is still by prio rank ascending (1=fulltime, 2=parttime, 3=trust, 4=side, … 7=tedious, 99=missing).
    - Tiebreak order uses the strict six-level algorithm: (1) prio rank, (2) manual `order:` ascending (within-rank; missing = sorts last), (3) due-date proximity, (4) effort ascending, (5) weekend domain order per registry, (6) alphabetical.
 
    **c. Fulltime sectioning**:

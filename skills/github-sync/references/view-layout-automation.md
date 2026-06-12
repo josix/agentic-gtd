@@ -118,7 +118,7 @@ Each recipe assumes you've navigated to the view and taken a fresh snapshot firs
 - **Rename**: double-click the view tab (or tab **▾** → **Rename**), type the name, Enter.
 - **Reorder Priority/Domain options** (so Board columns read in ladder order): this lives in
   **Project Settings → the field → drag options**, not in the view. Order them
-  `fulltime, parttime, side, trust, long, short, tedious` (Priority) and
+  `fulltime, parttime, trust, side, long, short, tedious` (Priority) and
   `fulltime, parttime, side-projects, open-source, knowledge` (Domain).
 
 ---

@@ -45,7 +45,7 @@ function makeDataArray(arr) {
 // ─── Reproduce the exact crash path ───────────────────────────────────────
 
 const rankMap = {
-  fulltime: 1, parttime: 2, side: 3, trust: 4, long: 5, short: 6, tedious: 7,
+  fulltime: 1, parttime: 2, trust: 3, side: 4, long: 5, short: 6, tedious: 7,
 };
 const DEFAULT_RANK = 99;
 
@@ -165,7 +165,7 @@ console.log("  Fix: source recurring completions from `records` array instead");
 // ─── Test 5: order:N tiebreak within same prio rank ───────────────────────
 console.log("\n=== Test 5: order:N tiebreak — within-rank manual sort ===");
 
-// Three tasks with the same rank (side = 3), same everything else.
+// Three tasks with the same rank (trust = 3), same everything else.
 // order:2, order:1, no order — expected sorted sequence: order:1, order:2, no-order
 const baseAttrs = { rank: 3, duEpoch: Infinity, effortMin: 60, domainIdx: 2 };
 const tOrder2  = Object.assign({}, baseAttrs, { order: 2,    title: "Task order 2" });

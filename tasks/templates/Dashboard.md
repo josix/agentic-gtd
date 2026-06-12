@@ -14,8 +14,8 @@
 const rankMap = {
   fulltime: 1,
   parttime: 2,
-  side:     3,
-  trust:    4,
+  trust:    3,
+  side:     4,
   long:     5,
   short:    6,
   tedious:  7,
@@ -1497,7 +1497,7 @@ try {
   // One column per priority that has ≥1 task, in rank order, with an
   // "Unprioritized" trailing column for rank-99 tasks.
 
-  const prioTierOrder = ["fulltime","parttime","side","trust","long","short","tedious"];
+  const prioTierOrder = ["fulltime","parttime","trust","side","long","short","tedious"];
 
   // Group records into columns.
   const columnMap = {};

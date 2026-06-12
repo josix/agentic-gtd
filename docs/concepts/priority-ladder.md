@@ -12,8 +12,8 @@ The `prio:` tag is the single field that sets a task's ranking position — it i
 |------------|------|-----------------|
 | `fulltime` | 1 | Deliverables that directly drive your full-time job performance |
 | `parttime` | 2 | Deliverables that directly drive your part-time job performance |
-| `side` | 3 | Active side-project work moving toward launch or revenue |
-| `trust` | 4 | Tasks affecting credit/trust — commitments others are waiting on |
+| `trust` | 3 | Tasks affecting credit/trust — commitments others are waiting on |
+| `side` | 4 | Active side-project work moving toward launch or revenue |
 | `long` | 5 | High-leverage long-term investments (compounds over months) |
 | `short` | 6 | Low-stakes quick wins |
 | `tedious` | 7 | Necessary but mechanical tasks |

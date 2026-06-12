@@ -27,7 +27,7 @@ Parse `$ARGUMENTS`:
    - **Title**: the text BEFORE the first `key:value` tag.
    - **Tags**: apply `(\w+):(\S+)` to the full line. Recognized keys: `prio`, `project`, `effort`, `impact`, `due`, `context`, `recurs`, `last`.
    - For recurring tasks (`recurs:` present), compute and show the **effective due** (`last + interval`, or "now" if never done) in the `due` cell, suffixed with the cadence, e.g. `2026-06-12 (every 3d)`. This is a read-only view — show the recurrence, do not filter on it.
-   - **prio rank** (for sorting only — never dropped): fulltime=1, parttime=2, side=3, trust=4, long=5, short=6, tedious=7, missing/invalid=99.
+   - **prio rank** (for sorting only — never dropped): fulltime=1, parttime=2, trust=3, side=4, long=5, short=6, tedious=7, missing/invalid=99.
    - Normalize `effort`, `due`, `context` per the skill's rules for display, but do NOT coerce away values — show what is present.
 
 4. **Group and sort**:

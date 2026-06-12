@@ -59,8 +59,8 @@ The authoritative domain list is in `tasks/domains.md` (read it). The current de
 4. **Assign prio by reasoning about the priority ladder**:
    - `fulltime` (rank 1) — directly impacts your job performance or deliverables
    - `parttime` (rank 2) — directly drives your part-time job performance or deliverables
-   - `side` (rank 3) — active side-project work moving toward launch or revenue
-   - `trust` (rank 4) — affects credibility, commitments, or relationships (respond to someone waiting, meet a deadline others depend on)
+   - `trust` (rank 3) — affects credibility, commitments, or relationships (respond to someone waiting, meet a deadline others depend on)
+   - `side` (rank 4) — active side-project work moving toward launch or revenue
    - `long` (rank 5) — high-leverage investment that pays off over months
    - `short` (rank 6) — small, visible, quick win
    - `tedious` (rank 7) — necessary but mechanical
